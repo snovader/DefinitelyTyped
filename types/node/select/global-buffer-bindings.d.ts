@@ -6,8 +6,6 @@ declare module "node/select/buffer-bindings.js" {
         type BufferEncoding =
             | import("node:buffer").TranscodeEncoding
             | import("node/select/scoped-buffer.js").BinaryToTextEncoding;
-        interface BufferConstructor {}
-        interface Buffer {}
         var Buffer: BufferConstructor;
     }
     export { Buffer, BufferConstructor, BufferEncoding };

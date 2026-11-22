@@ -79,6 +79,39 @@ function checkBufferSurface(lib) {
     for (const name of added) assert.deepEqual(subset.modules.get(name), legacy.modules.get(name), name);
 }
 
+// Inspect resolved signatures at a consumer expression. Comparing just the
+// interface names misses duplicate construct signatures and lost overload docs.
+function bufferSignatures(dir) {
+    const ts = require("typescript");
+    const entry = join(dir, "signatures.ts");
+    writeFileSync(entry, 'import { Buffer as B } from "node:buffer";\nexport const ctor = B;\nexport const value = B.alloc(1);\n');
+    const program = ts.createProgram([entry], {
+        module: ts.ModuleKind.NodeNext, target: ts.ScriptTarget.ESNext, strict: true, types: ["node"],
+        typeRoots: [join(dir, "node_modules/@types")], lib: ["lib.esnext.d.ts"],
+    });
+    const checker = program.getTypeChecker();
+    const signatures = new Map();
+    for (const statement of program.getSourceFile(entry).statements.filter(ts.isVariableStatement)) {
+        const variable = statement.declarationList.declarations[0];
+        const type = checker.getTypeAtLocation(variable.name);
+        const record = (name, overloads) => {
+            if (!overloads.length) return;
+            // Well-known symbol names include a compiler-assigned numeric ID.
+            const key = variable.name.text + "." + name.replace(/^(__@.*)@\d+$/, "$1");
+            signatures.set(key, overloads.map(signature => ({
+                signature: checker.signatureToString(signature, variable, ts.TypeFormatFlags.NoTruncation),
+                docs: ts.displayPartsToString(signature.getDocumentationComment(checker)),
+                tags: signature.getJsDocTags().map(tag => [tag.name, ts.displayPartsToString(tag.text)]),
+            })));
+        };
+        record("new", type.getConstructSignatures());
+        for (const member of type.getProperties()) {
+            record(member.name, checker.getTypeOfSymbolAtLocation(member, variable).getCallSignatures());
+        }
+    }
+    return signatures;
+}
+
 function nodeFiles(dir, files) {
     return files.filter(file => file.startsWith(packageDir(dir) + sep)).map(file => relative(packageDir(dir), file));
 }
@@ -119,6 +152,10 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", 
 
 function checkSelectors() {
     if (compiler === require.resolve("typescript/bin/tsc")) {
+        const upstream = bufferSignatures(targets[0]);
+        const candidate = bufferSignatures(targets[1]);
+        assert.deepEqual([...candidate.keys()].sort(), [...upstream.keys()].sort());
+        for (const [name, overloads] of upstream) assert.deepEqual(candidate.get(name), overloads, name);
         for (const libs of [["es2020"], ["esnext"], ["esnext", "dom"], ["esnext", "webworker"]]) {
             checkBufferSurface(libs);
         }
@@ -154,24 +191,30 @@ function checkSelectors() {
 try {
     stage();
     if (!values["overloads-only"]) checkSelectors();
-    const mismatches = [];
-    for (const files of [["order"], ["load-node-first", "order"]]) {
+    const orders = [
+        ["order"],
+        ["load-node-first", "order"],
+        ["load-node-first", "order-peer", "order"],
+        ["load-node-first", "order", "order-peer"],
+        ["order-peer", "load-node-first", "order"],
+    ];
+    const selections = [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"]];
+    const baselineDeclarations = new Set();
+    for (const files of orders) {
         const comparison = { files, emit: "order" };
         const base = compile(targets[0], ["node"], "", "nodenext", false, false, "ESNext", comparison);
-        const actual = compile(targets[1], ["node"], "", "nodenext", false, false, "ESNext", comparison);
-        assert.equal(actual.diagnostics, base.diagnostics);
-        if (actual.declaration !== base.declaration) {
-            const signatures = emitted => [...emitted.matchAll(/^export declare const (?:flag|decoded): [^\n]+(?:\n    [^\n]+\n\};)?/gm)]
-                .map(([declaration]) => declaration).join("\n");
-            mismatches.push(files.join(", ") + "\nupstream\n" + signatures(base.declaration) + "\nprototype\n" + signatures(actual.declaration));
+        assert.equal(base.diagnostics, "", "the upstream overload fixture must compile");
+        baselineDeclarations.add(base.declaration);
+        for (const types of selections) {
+            const actual = compile(targets[1], types, "", "nodenext", false, false, "ESNext", comparison);
+            const context = types.join("+") + " with files " + files.join(", ");
+            assert.equal(actual.diagnostics, base.diagnostics, context);
+            assert.equal(actual.declaration, base.declaration, context);
         }
     }
-    if (mismatches.length) {
-        console.error(version + " failed declaration-emit parity for " + mismatches.length + " of 2 overload-order cases.\n" + mismatches.join("\n"));
-        process.exitCode = 1;
-    } else {
-        console.log(version + " matched both overload-order cases.");
-    }
+    assert.ok(baselineDeclarations.size >= 3, "the upstream fixtures must exercise different overload orders");
+    console.log(version + " matched upstream declaration emit for " + orders.length + " overload orders across "
+        + selections.length + " selector combinations.");
 } finally {
     rmSync(tmp, { recursive: true, force: true });
 }

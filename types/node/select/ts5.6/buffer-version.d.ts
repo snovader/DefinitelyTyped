@@ -1,9 +1,9 @@
-import type { Buffer, BufferEncoding, TypedArray } from "node/select/buffer-bindings.js";
+import type { BufferEncoding, TypedArray } from "node/select/buffer-bindings.js";
 import type { WithImplicitCoercion } from "node:buffer";
 
-declare module "../buffer-target.js" {
+declare module "../buffer-core.js" {
     interface BufferConstructor {
-        // see ../buffer.d.ts for implementation shared with all TypeScript versions
+        // see ../buffer-core.d.ts for members shared with all TypeScript versions
 
         /**
          * Allocates a new buffer containing the given {str}.
@@ -353,7 +353,7 @@ declare module "../buffer-target.js" {
         allocUnsafeSlow(size: number): Buffer;
     }
     interface Buffer extends Uint8Array {
-        // see ../buffer.d.ts for implementation shared with all TypeScript versions
+        // see ../buffer-core.d.ts for members shared with all TypeScript versions
 
         /**
          * Returns a new `Buffer` that references the same memory as the original, but

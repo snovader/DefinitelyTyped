@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,4 +63,71 @@ for (const name of ["events", "abortcontroller"]) {
         unindent("type InternalEventTargetEventProperties<T> = " + between(await source("events.d.ts"),
             "type InternalEventTargetEventProperties<T> = ", "\n        };") + "\n        };", 8);
     await emit("select/" + name + ".d.ts", dependencies + "\n\n" + fallback);
+}
+
+// A global method must take part in the same declaration merge as a consumer's
+// overload. Inheriting it alone would let the consumer shadow the original.
+const printer = ts.createPrinter({
+    removeComments: true,
+    newLine: ts.NewLineKind.LineFeed,
+}, {
+    substituteNode(_hint, node) {
+        if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)
+            && ["ArrayBufferView", "TypedArray"].includes(node.typeName.text)) {
+            return ts.factory.updateTypeReferenceNode(node, ts.factory.createQualifiedName(ts.factory.createIdentifier("NodeJS"), node.typeName), node.typeArguments);
+        }
+        return node;
+    },
+});
+
+function jsDoc(node, file) {
+    return (node.jsDoc ?? []).map(doc => doc.getText(file).replace(/\n[ \t]+\*/g, "\n *")).join("\n");
+}
+
+function globalInterface(iface, file, common) {
+    const name = iface.name.text;
+    const isInstance = name === "Buffer";
+    const counts = new Map();
+    for (const member of iface.members) {
+        const key = member.name?.getText(file);
+        if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const params = iface.typeParameters?.map(param => param.getText(file));
+    const header = "    interface " + name + (params ? "<" + params.join(", ") + ">" : "");
+    let heritage = "";
+    if (isInstance && common) {
+        // Only inherit documentation for names with a single signature. An
+        // overloaded method can document each signature independently.
+        const keys = [...counts].filter(([, count]) => count === 1).map(([key]) => JSON.stringify(key));
+        heritage = " extends Pick<SharedBuffer,\n        | " + keys.join("\n        | ") + ">";
+    } else if (isInstance) {
+        const args = iface.typeParameters?.map(param => param.name.text);
+        heritage = " extends SharedBuffer" + (args ? "<" + args.join(", ") + ">" : "");
+    }
+    // Inheriting the shared constructor here can change the alias TypeScript
+    // emits for an extracted generic Buffer.from, even with its own overloads.
+    const members = iface.members.map(member => {
+        const inheritDocs = isInstance && counts.get(member.name?.getText(file)) === 1;
+        const signature = printer.printNode(ts.EmitHint.Unspecified, member, file);
+        return [inheritDocs ? "" : jsDoc(member, file), signature].filter(Boolean).join("\n").replace(/^/gm, "        ");
+    });
+    const docs = jsDoc(iface, file);
+    return [docs && docs.replace(/^/gm, "    "), header + heritage + " {", ...members, "    }"].filter(Boolean).join("\n");
+}
+
+for (const [input, output] of [
+    ["select/buffer-core.d.ts", "buffer-methods"],
+    ["select/buffer-version.d.ts", "buffer-version"],
+    ["select/ts5.6/buffer-version.d.ts", "buffer-version-ts5.6"],
+]) {
+    const file = ts.createSourceFile(input, await source(input), ts.ScriptTarget.Latest, true);
+    const augmentation = file.statements.find(ts.isModuleDeclaration);
+    const interfaces = (augmentation?.body.statements ?? file.statements).filter(ts.isInterfaceDeclaration);
+    if (interfaces.map(node => node.name.text).join(",") !== "BufferConstructor,Buffer") {
+        throw new Error("Expected both Buffer interfaces in " + input);
+    }
+    const globals = interfaces.map(iface => globalInterface(iface, file, !augmentation)).join("\n");
+    await emit("legacy/" + output + ".d.ts", 'declare module "node:buffer" {\n'
+        + '    import type { Buffer as SharedBuffer } from "node/select/buffer-core.js";\n'
+        + "    global {\n" + globals.replace(/^/gm, "    ") + "\n    }\n}");
 }

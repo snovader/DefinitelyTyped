@@ -1,7 +1,7 @@
-import type { Buffer, BufferEncoding, TypedArray } from "node/select/buffer-bindings.js";
+import type { BufferEncoding, TypedArray } from "node/select/buffer-bindings.js";
 import type { ImplicitArrayBuffer, WithImplicitCoercion } from "node:buffer";
 
-declare module "./buffer-target.js" {
+declare module "./buffer-core.js" {
     interface BufferConstructor {
         // see select/buffer-core.d.ts for members shared with all TypeScript versions
 

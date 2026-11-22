@@ -1,20 +1,38 @@
-# Selecting Buffer declarations
+# Selecting Node declarations
 
 This prototype targets the Node 26 declarations. With this checkout installed as `@types/node`, a consumer can use the following configuration.
 
 ```json
 {
   "compilerOptions": {
-    "types": ["node/buffer"]
+    "types": ["node/zlib"]
   }
 }
 ```
 
-Import `Buffer` from `node:buffer` or `buffer`. The real `Blob.stream()` signature also brings in `node:stream/web` and `stream/web`. With ES2020 or later, this selector adds no unqualified globals. Add `node/globals` to opt into the Node global environment. That selector currently references the full package, including the built-ins exposed by `process.getBuiltinModule()` and the Fetch dependencies. Other module selectors are outside this prototype.
+Import compression functions from `node:zlib` or `zlib`. This selector already includes `node:buffer`. A consumer that only needs Buffer can use `"types": ["node/buffer"]`. Its `Blob.stream()` signature also brings in `node:stream/web`. With ES2020 or later, both selectors leave unqualified global names alone. Add `node/globals` to opt into the Node global environment. That selector currently references the full package, including the built-ins exposed by `process.getBuiltinModule()` and the Fetch dependencies. Buffer and zlib are the independently verified subset entry points.
+
+## What zlib loads
+
+```ts
+import { Buffer } from "node:buffer";
+import { createGunzip, createGzip, gzipSync } from "node:zlib";
+
+const bytes: Buffer = gzipSync("payload");
+const compressor = createGzip();
+const decompressed = compressor.pipe(createGunzip());
+compressor.end("payload");
+```
+
+The real `zlib.d.ts` uses the existing Buffer selector and `Transform` from `node:stream`. Stream brings in events, async hooks, stream iterators, stream promises and Web Streams. These eight built-ins are available under both their bare and `node:` names. The file graph excludes HTTP, filesystem declarations, `stream/consumers`, `zlib/iter`, the full Node entry point and `undici-types`.
+
+On TypeScript 6.0.3, zlib loads 23 Node declaration files, including all 12 loaded by Buffer. Adding Buffer explicitly in either order produces the same file set. Full Node loads all 23 among its 105 files. The complete programs are compared as well, so extra compiler libraries or external packages would fail the test.
+
+The stream and events declarations import their environment types through `select/zlib-bindings.d.ts`. The subset uses module-local event, stream and iterator interfaces. ES2020 projects get local disposal-symbol types. With full Node, the bindings resolve to the original global types. The generated `legacy/events-globals.d.ts` and `legacy/stream-globals.d.ts` put the methods back on the open `NodeJS` interfaces, where consumer overloads can merge with them. The stream dependency and the standalone `node/async_hooks` entry share the same async-hooks declarations. Each supplies the appropriate disposal interface for `RunScope`; direct async-hooks selection therefore still honors a consumer's global `Disposable` augmentation without loading streams. Older compiler routes include forwarding files for types named in a library's emitted declarations.
 
 ## Shared declarations and global overloads
 
-Both selectors load the same public module in `select/register.d.ts`, the same ordinary `Buffer` and `BufferConstructor` interfaces in `select/buffer-core.d.ts`, and the same compiler-specific overloads in `select/buffer-version.d.ts` or its TypeScript 5.6 counterpart. They also load the same `stream/web.d.ts`. These are the files to edit when changing the Buffer API.
+Buffer-only, zlib-only and full Node load the same public Buffer module in `select/register.d.ts`, the same ordinary `Buffer` and `BufferConstructor` interfaces in `select/buffer-core.d.ts`, and the same compiler-specific overloads in `select/buffer-version.d.ts` or its TypeScript 5.6 counterpart. They also load the same `stream/web.d.ts`. These are the files to edit when changing the Buffer API.
 
 The subset exports the module-local interfaces. Full Node loads an additional pair of generated files: `legacy/buffer-methods.d.ts` and the applicable `legacy/buffer-version*.d.ts`. They declare members on the open global interfaces in the same scope as upstream. The public module then exports the global Buffer, so consumer augmentations reach `Buffer`, `globalThis.Buffer`, and both module spellings. The global instance interface inherits from the shared Buffer. Its single-signature methods can inherit their documentation; overloads keep their individual documentation and deprecation tags.
 
@@ -26,16 +44,17 @@ Run from `types/node` with the checkout's TypeScript and `undici-types` dependen
 
 ```sh
 node scripts/buffer-subset/generate.mjs --check
+node scripts/buffer-subset/verify.mjs --zlib-only
 node scripts/buffer-subset/verify.mjs --overloads-only
 node scripts/buffer-subset/verify.mjs
 ```
 
 Run the generator without `--check` after changing the shared declarations. The verifier stages the candidate and upstream commit `9b0ad8df8337133ee935159e5edf8947b1064085` as separate installations. Pass `--tsc /absolute/path/to/tsc` to test a different compiler.
 
-The overload fixtures compare the complete emitted consumer declaration byte for byte. They cover `readUInt8`, `Buffer.from`, a construct signature, and extracted method references. The verifier runs five source orders, including two competing consumer augmentations, under five full/global selector combinations. The original failing case now emits `0 | 1` for the read and preserves the `decoded` property on the result of `Buffer.from`. Reversing the source order produces the broader upstream types.
+The overload fixtures compare the complete consumer declaration byte for byte. They cover Buffer instance methods, static factories, construction, extracted method references and an overlapping `NodeJS.EventEmitter` overload. Five source orders exercise seven full/global selector combinations.
 
-The regular suite runs 85 consumer builds per compiler with ES, DOM and Web Worker libraries, NodeNext and Bundler resolution, and implicit and explicit type roots. It compares diagnostics and declaration emit, checks that the full selector includes the subset's entire file list, and checks both orders of the combined selectors. The checkout's TypeScript also compares unqualified global names, public module exports, and the resolved Buffer constructor and method signatures with their documentation and tags.
+The selector suite uses ES, DOM and Web Worker libraries, NodeNext and Bundler resolution, and implicit and explicit type roots. It checks compression and streaming calls, typed event emission, sync and async disposal, and the absence of Node globals. A downstream consumer compiles the emitted zlib declarations, including inferred iterator, stream and abort-signal types. NodeNext is exercised with CommonJS and ESM packages.
 
-On TypeScript 6.0.3, Buffer-only loads 12 Node declaration files. Full Node loads all 12 among its 96 files. Buffer-only adds no unqualified globals. The unchanged TypeScript 5.7.3 baseline reports TS2430 in the full DOM and Web Worker configurations; the verifier requires the same diagnostics.
+On compilers with the JavaScript checker API, the verifier compares all unqualified global names against an empty selection and built-in export names against upstream. It also checks that the compiler resolves the type of `gzipSync()` and an explicitly imported `Buffer` to the same symbol. Full Node and explicit globals are compared with upstream diagnostics and declaration emit. The TypeScript 5.7.3 baseline reports TS2430 in the full DOM and Web Worker configurations; the verifier requires matching diagnostics.
 
-TypeScript 5.6.3, 5.7.3, 5.9.3, 6.0.3 and 7.1.0-dev.20261121.1 passed both suites. The DefinitelyTyped Node DOM, non-DOM and Web Worker test projects also passed on TypeScript 5.9.3.
+The zlib prototype passed on TypeScript 5.6.3, 5.7.3, 5.9.3, 6.0.3 and 7.1.0-dev.20261121.1. The upstream Node DOM, non-DOM and Web Worker test projects passed on TypeScript 5.9.3.

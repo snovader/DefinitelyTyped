@@ -1,5 +1,8 @@
+/// <reference path="./buffer.d.ts" />
+/// <reference path="./stream.d.ts" />
 declare module "node:zlib" {
-    import { NonSharedBuffer } from "node:buffer";
+    import { type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
+    import type { Buffer, NonSharedBuffer } from "node:buffer";
     import * as stream from "node:stream";
     interface ZlibOptions {
         /**

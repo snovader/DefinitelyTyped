@@ -12,6 +12,7 @@ const nodeDir = resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const { values } = parseArgs({ options: {
     baseline: { type: "string", default: "9b0ad8df8337133ee935159e5edf8947b1064085" },
+    "zlib-only": { type: "boolean" },
     "overloads-only": { type: "boolean" },
     tsc: { type: "string", default: require.resolve("typescript/bin/tsc") },
 } });
@@ -22,7 +23,8 @@ const oldBuffers = version.startsWith("Version 5.6.");
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "dt-buffer-")));
 const targets = ["baseline", "candidate"].map(name => join(tmp, name));
 const dependency = dirname(require.resolve("undici-types/package.json", { paths: [nodeDir] }));
-const results = new Set();
+const bufferCounts = new Set();
+const zlibCounts = new Set();
 let count = 0;
 const baselineErrors = new Set();
 
@@ -44,8 +46,7 @@ function stage() {
 }
 
 // Check the complete global and module name sets with the locally installed compiler API.
-function surface(dir, types, lib) {
-    const ts = require("typescript");
+function surface(ts, dir, types, lib) {
     const entry = join(dir, "surface.ts");
     writeFileSync(entry, "export {};\n");
     const program = ts.createProgram([entry], {
@@ -66,17 +67,26 @@ function surface(dir, types, lib) {
     return { globals, modules };
 }
 
-function checkBufferSurface(lib) {
-    const empty = surface(targets[1], [], lib);
-    const subset = surface(targets[1], ["node/buffer"], lib);
-    const legacy = surface(targets[0], ["node"], lib);
-    const full = surface(targets[1], ["node"], lib);
+function checkSelectorSurface(ts, lib) {
+    const empty = surface(ts, targets[1], [], lib);
+    const subset = surface(ts, targets[1], ["node/buffer"], lib);
+    const legacy = surface(ts, targets[0], ["node"], lib);
+    const full = surface(ts, targets[1], ["node"], lib);
     assert.deepEqual(full.globals, legacy.globals);
     for (const [name, members] of legacy.modules) assert.deepEqual(full.modules.get(name), members, name);
     assert.deepEqual(subset.globals, empty.globals);
-    const added = [...subset.modules.keys()].filter(name => !empty.modules.has(name)).sort();
-    assert.deepEqual(added, ['"buffer"', '"node:buffer"', '"node:stream/web"', '"stream/web"']);
-    for (const name of added) assert.deepEqual(subset.modules.get(name), legacy.modules.get(name), name);
+    const bufferModules = ["buffer", "stream/web"];
+    const zlib = surface(ts, targets[1], ["node/zlib"], lib);
+    assert.deepEqual(zlib.globals, empty.globals);
+    for (const [profile, builtins] of [
+        [subset, bufferModules],
+        [zlib, [...bufferModules, "async_hooks", "events", "stream", "stream/iter", "stream/promises", "zlib"]],
+    ]) {
+        const added = [...profile.modules.keys()].filter(name => !empty.modules.has(name)).sort();
+        const expected = builtins.flatMap(name => [JSON.stringify(name), JSON.stringify("node:" + name)]).sort();
+        assert.deepEqual(added, expected);
+        for (const name of added) assert.deepEqual(profile.modules.get(name), legacy.modules.get(name), name);
+    }
 }
 
 // Inspect resolved signatures at a consumer expression. Comparing just the
@@ -121,13 +131,14 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", 
         ? ["buffer", ...(oldBuffers || lib !== "ESNext" ? [] : ["modern"]), ...(host ? [] : ["es-only"]), ...(lib === "ES2020" ? ["es2020"] : [])]
         : ["legacy"]);
     const options = {
-        target: "ESNext", module: mode === "bundler" ? "ESNext" : "NodeNext", moduleResolution: mode,
+        target: "ESNext", module: mode === "bundler" ? "ESNext" : "NodeNext", moduleResolution: mode === "nodenext-esm" ? "nodenext" : mode,
         lib: [lib, ...(host ? [host] : [])], strict: true, skipLibCheck: false, types, declaration: true,
         emitDeclarationOnly: true, rootDir: "./fixtures", outDir: "./out", ...(roots ? { typeRoots: ["./node_modules/@types"] } : {}),
     };
     // Both package consumers and their declaration dependencies are local to this staging directory.
     writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions: options, files: files.map(f => "fixtures/" + f + ".ts") }));
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ type: mode === "bundler" ? "module" : "commonjs" }));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ type: mode === "nodenext" ? "commonjs" : "module" }));
+    rmSync(join(dir, "out"), { recursive: true, force: true });
     let output;
     try {
         output = run(["-p", "tsconfig.json", "--pretty", "false", "--listFiles"], dir);
@@ -145,26 +156,121 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", 
         const loaded = nodeFiles(dir, filesRead);
         assert.ok(loaded.length > 0 && loaded.every(f => /^(?:(?:ts5\.[67]\/)?(?:select\/|stream\/web\.d\.ts$|buffer(?:\.buffer)?\.d\.ts$))/.test(f)), String(loaded));
         assert.ok(!filesRead.some(f => f.includes("/undici-types/")));
-        results.add(loaded.length);
+        bufferCounts.add(loaded.length);
     }
     return { files: filesRead, diagnostics, declaration: readFileSync(join(dir, "out", (comparison?.emit ?? files[0]) + ".d.ts"), "utf8") };
 }
 
+function checkZlibIdentity(ts, types) {
+    const dir = targets[1];
+    const entry = join(dir, "fixtures/zlib-api.ts");
+    const program = ts.createProgram([entry], {
+        module: ts.ModuleKind.NodeNext, target: ts.ScriptTarget.ESNext, strict: true, types,
+        typeRoots: [join(dir, "node_modules/@types")], lib: ["lib.esnext.d.ts"],
+    });
+    const checker = program.getTypeChecker();
+    const bindings = program.getSourceFile(entry).statements.filter(ts.isVariableStatement)
+        .flatMap(statement => [...statement.declarationList.declarations]);
+    const symbolOf = name => checker.getTypeAtLocation(bindings.find(binding => binding.name.text === name).name).getSymbol();
+    const result = symbolOf("bytes");
+    assert.equal(result?.name, "Buffer");
+    assert.equal(result, symbolOf("sameBuffer"), "gzipSync and the imported Buffer must resolve to the same symbol");
+    assert.ok(result.declarations.some(node => node.getSourceFile().fileName.endsWith("/select/buffer-core.d.ts")));
+}
+
+const zlibDependencies = [
+    "zlib.d.ts", "stream.d.ts", "stream/iter.d.ts", "stream/promises.d.ts", "events.d.ts", "select/async-hooks.d.ts", "select/async-hooks-core.d.ts",
+    "select/emitter.d.ts", "select/stream-types.d.ts", "select/zlib-bindings.d.ts", "select/zlib-nodejs.d.ts",
+];
+
+function checkZlib(host, mode, roots, bufferFiles, lib = "ESNext") {
+    const candidate = targets[1];
+    const options = [host, mode, roots, false, lib];
+    const fixtures = { files: ["zlib-api", "zlib-isolation", lib === "ESNext" ? "zlib-disposal" : "zlib-es2020", ...(host ? [] : ["es-only"])] };
+    const subset = compile(candidate, ["node/zlib"], ...options, fixtures);
+    assert.equal(subset.diagnostics, "");
+    zlibCounts.add(nodeFiles(candidate, subset.files).length);
+    const expected = new Set(bufferFiles);
+    const pkg = packageDir(candidate);
+    for (const file of zlibDependencies) expected.add(join(pkg, file));
+    const routed = version.match(/^Version (5\.[67])\./);
+    if (routed) {
+        expected.add(join(pkg, "ts" + routed[1], "select/zlib-bindings.d.ts"));
+        expected.add(join(pkg, "ts" + routed[1], "select/emitter.d.ts"));
+        if (!roots) expected.add(join(pkg, "ts" + routed[1], "zlib.d.ts"));
+    }
+    // Compare *all* inputs, including ES libraries and external packages. The
+    // Buffer and zlib consumer programs naturally have different fixture files.
+    const dependencies = files => new Set([...files].filter(file => !file.startsWith(join(candidate, "fixtures") + sep)));
+    assert.deepEqual(dependencies(subset.files), dependencies(expected), "unexpected zlib dependency graph");
+    for (const types of [["node/zlib", "node/buffer"], ["node/buffer", "node/zlib"]]) {
+        const both = compile(candidate, types, ...options, fixtures);
+        assert.equal(both.diagnostics, "");
+        assert.deepEqual(new Set(both.files), new Set(subset.files), "selecting Buffer must add zero files");
+        assert.equal(both.declaration, subset.declaration);
+    }
+
+    // A downstream project must be able to name even the inferred iterator and pipe signatures.
+    writeFileSync(join(candidate, "fixtures/zlib-emitted.d.ts"), subset.declaration);
+    const consumer = compile(candidate, ["node/zlib"], ...options, { files: ["use-zlib-output"] });
+    assert.equal(consumer.diagnostics, "", "consume the emitted zlib declaration");
+
+    if (!host && mode === "nodenext" && !roots && lib === "ESNext") {
+        const consumerWithGlobals = compile(candidate, ["node"], ...options, { files: ["use-zlib-output"] });
+        assert.equal(consumerWithGlobals.diagnostics, "", "a full Node project can consume the isolated declaration");
+    }
+    if (lib === "ESNext") {
+        const fullFixtures = { files: ["zlib-api", "zlib-globals"] };
+        const base = compile(targets[0], ["node"], ...options, fullFixtures);
+        const globalsOutput = dir => readFileSync(join(dir, "out/zlib-globals.d.ts"), "utf8");
+        for (const types of [["node"], ["node/zlib", "node/globals"], ["node/globals", "node/zlib"]]) {
+            const full = compile(candidate, types, ...options, fullFixtures);
+            assert.equal(full.diagnostics, base.diagnostics);
+            assert.equal(full.declaration, base.declaration, "full zlib API declaration emit");
+            assert.equal(globalsOutput(candidate), globalsOutput(targets[0]), "zlib global augmentation emit");
+            const loaded = new Set(full.files);
+            for (const file of nodeFiles(candidate, subset.files)) assert.ok(loaded.has(join(pkg, file)), file);
+        }
+    }
+}
 function checkSelectors() {
     if (compiler === require.resolve("typescript/bin/tsc")) {
         const upstream = bufferSignatures(targets[0]);
         const candidate = bufferSignatures(targets[1]);
         assert.deepEqual([...candidate.keys()].sort(), [...upstream.keys()].sort());
         for (const [name, overloads] of upstream) assert.deepEqual(candidate.get(name), overloads, name);
+    }
+    const api = resolve(dirname(realpathSync(compiler)), "../lib/typescript.js");
+    if (existsSync(api)) {
+        const ts = require(api);
+        assert.equal("Version " + ts.version, version);
+        for (const types of [["node/zlib"], ["node/zlib", "node/buffer"], ["node/buffer", "node/zlib"]]) {
+            checkZlibIdentity(ts, types);
+        }
         for (const libs of [["es2020"], ["esnext"], ["esnext", "dom"], ["esnext", "webworker"]]) {
-            checkBufferSurface(libs);
+            checkSelectorSurface(ts, libs);
         }
     }
-    compile(targets[1], ["node/buffer"], "", "nodenext", false, true, "ES2020");
+    // Direct selection of async_hooks already worked upstream with ES disposal types.
+    // It must not acquire the streams, events or Buffer dependency graph.
+    const hooks = { files: ["standalone-async-hooks"] };
+    const hooksOptions = [["node/async_hooks"], "", "nodenext", true, false, "ESNext", hooks];
+    const previousHooks = compile(targets[0], ...hooksOptions);
+    const currentHooks = compile(targets[1], ...hooksOptions);
+    assert.equal(previousHooks.diagnostics, "");
+    assert.equal(currentHooks.diagnostics, previousHooks.diagnostics);
+    assert.equal(currentHooks.declaration, previousHooks.declaration);
+    assert.deepEqual(nodeFiles(targets[1], currentHooks.files).sort(), ["async_hooks.d.ts", "select/async-hooks-core.d.ts"]);
+    const es2020 = compile(targets[1], ["node/buffer"], "", "nodenext", false, true, "ES2020");
+    checkZlib("", "nodenext", false, es2020.files, "ES2020");
+    const esm = compile(targets[1], ["node/buffer"], "", "nodenext-esm", false, true);
+    checkZlib("", "nodenext-esm", false, esm.files);
     for (const host of ["", "DOM", "WebWorker"]) {
         for (const mode of ["nodenext", "bundler"]) {
             for (const roots of [false, true]) {
                 const subset = compile(targets[1], ["node/buffer"], host, mode, roots, true);
+                checkZlib(host, mode, roots, subset.files);
+                if (values["zlib-only"]) continue;
                 const shared = nodeFiles(targets[1], subset.files);
                 const base = compile(targets[0], ["node"], host, mode, roots);
                 if (base.diagnostics) baselineErrors.add((host || "ES") + " " + [...base.diagnostics.matchAll(/error (TS\d+)/g)].map(match => match[1]).join(","));
@@ -184,13 +290,19 @@ function checkSelectors() {
         }
     }
     console.log(version + " matched the baseline diagnostics and declaration emit for the selector fixtures across " + count
-        + " builds, including subset isolation checks. Buffer-only loaded " + [...results].join("/") + " Node declaration files.");
+        + " builds, including subset isolation checks. Buffer-only loaded " + [...bufferCounts].join("/") + " Node declaration files; zlib-only loaded " + [...zlibCounts].join("/") + ".");
     if (baselineErrors.size) console.log("Inherited baseline diagnostics: " + [...baselineErrors].join(" / "));
 }
 
 try {
     stage();
     if (!values["overloads-only"]) checkSelectors();
+    if (!values["zlib-only"]) checkOverloadOrder();
+} finally {
+    rmSync(tmp, { recursive: true, force: true });
+}
+
+function checkOverloadOrder() {
     const orders = [
         ["order"],
         ["load-node-first", "order"],
@@ -198,7 +310,7 @@ try {
         ["load-node-first", "order", "order-peer"],
         ["order-peer", "load-node-first", "order"],
     ];
-    const selections = [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"]];
+    const selections = [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"], ["node/zlib", "node/globals"], ["node", "node/zlib"]];
     const baselineDeclarations = new Set();
     for (const files of orders) {
         const comparison = { files, emit: "order" };
@@ -215,6 +327,4 @@ try {
     assert.ok(baselineDeclarations.size >= 3, "the upstream fixtures must exercise different overload orders");
     console.log(version + " matched upstream declaration emit for " + orders.length + " overload orders across "
         + selections.length + " selector combinations.");
-} finally {
-    rmSync(tmp, { recursive: true, force: true });
 }

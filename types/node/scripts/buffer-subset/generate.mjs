@@ -46,7 +46,8 @@ for (const legacy of [false, true]) {
 const util = await source("util.d.ts");
 const encoding = 'export interface TextDecoderCommon' + unindent(between(util,
     '    export interface TextDecoderCommon', '    export interface TextEncoderEncodeIntoResult'), 4);
-const iterator = between(await source("legacy/globals.d.ts"), '    /** An async iterable iterator returned by the Node.js API. */\n', '\n    /**');
+const nodeGlobals = await source("legacy/globals.d.ts");
+const iterator = between(nodeGlobals, '    /** An async iterable iterator returned by the Node.js API. */\n', '\n    /**');
 await emit("select/stream-dependencies.d.ts", 'import type { AbortSignal } from "./abortcontroller.js";\n\n' +
     'export type HostAbortSignal = typeof globalThis extends { AbortSignal: { prototype: infer S } } ? S : AbortSignal;\n\n' +
     unindent(iterator, 4).replace("interface AsyncIterator<", "export interface NodeAsyncIterator<")
@@ -131,3 +132,36 @@ for (const [input, output] of [
         + '    import type { Buffer as SharedBuffer } from "node/select/buffer-core.js";\n'
         + "    global {\n" + globals.replace(/^/gm, "    ") + "\n    }\n}");
 }
+
+// Full Node keeps these methods in the global interface merge so downstream
+// overloads retain the same precedence as they have in upstream declarations.
+function indent(text, spaces) {
+    return text.trimEnd().replace(/^(?=.)/gm, " ".repeat(spaces));
+}
+const emitter = await source("select/emitter.d.ts");
+const helpers = between(emitter, "\n\n", "\nexport interface EventEmitter<").replace(/^export type /m, "type ");
+const methods = emitter.slice(emitter.indexOf("export interface EventEmitter<")).replace("export interface", "interface")
+    .replace("[captureRejectionSymbol]?", "[EventEmitter.captureRejectionSymbol]?");
+await emit("legacy/events-globals.d.ts", 'declare module "node:events" {\n'
+    + '    export {};\n    import EventEmitter = require("node:events");\n    import type { EventEmitterEventMap } from "node:events";\n'
+    + indent(helpers, 4) + "\n    global {\n        namespace NodeJS {\n" + indent(methods, 12) + "\n        }\n    }\n}");
+const streamPath = "select/stream-types.d.ts";
+const streamFile = ts.createSourceFile(streamPath, await source(streamPath), ts.ScriptTarget.Latest, true);
+const interfaces = streamFile.statements.filter(ts.isInterfaceDeclaration);
+if (interfaces.map(node => node.name.text).join(",") !== "ReadableStream,WritableStream,ReadWriteStream") {
+    throw new Error("Unexpected stream interfaces in " + streamPath);
+}
+const streamGlobals = interfaces.map(node => node.getFullText(streamFile).trim().replace(/^export interface /m, "interface ")).join("\n");
+await emit("legacy/stream-globals.d.ts", "export {};\n\ndeclare global {\n    namespace NodeJS {\n"
+    + indent(streamGlobals, 8) + "\n    }\n}");
+
+function localNodeInterface(name) {
+    const start = "    interface " + name;
+    return "export " + unindent(start + between(nodeGlobals, start, "\n    }") + "\n    }", 4);
+}
+await emit("select/zlib-nodejs.d.ts", 'export type { ArrayBufferView } from "node/select/byte-types.js";\n'
+    + 'export type { NodeAsyncIterator as AsyncIterator } from "./stream-dependencies.js";\n'
+    + 'export type { EventEmitter } from "./emitter.js";\n'
+    + 'export type { ReadableStream, ReadWriteStream, WritableStream } from "./stream-types.js";\n\n'
+    + localNodeInterface("Iterator<").replaceAll("NodeJS.Iterator", "Iterator") + "\n\n"
+    + localNodeInterface("ErrnoException "));

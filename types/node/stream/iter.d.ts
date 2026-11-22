@@ -1,4 +1,6 @@
 declare module "node:stream/iter" {
+    import type { AsyncDisposable, Disposable, Scope as NodeJS } from "node/select/zlib-bindings.js";
+    import type { AbortSignal } from "node/select/buffer-bindings.js";
     import { Abortable } from "node:events";
     import { Readable, Writable } from "node:stream";
     // Symbols and custom typedefs

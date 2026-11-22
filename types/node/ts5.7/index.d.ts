@@ -36,7 +36,7 @@
 /// <reference path="../buffer.buffer.d.ts" />
 
 // Definitions for Node.js modules that are not specific to any version of TypeScript:
-/// <reference path="../globals.d.ts" />
+/// <reference path="../legacy/globals.d.ts" />
 /// <reference path="../web-globals/abortcontroller.d.ts" />
 /// <reference path="../web-globals/blob.d.ts" />
 /// <reference path="../web-globals/console.d.ts" />
@@ -56,7 +56,7 @@
 /// <reference path="../assert.d.ts" />
 /// <reference path="../assert/strict.d.ts" />
 /// <reference path="../async_hooks.d.ts" />
-/// <reference path="../buffer.d.ts" />
+/// <reference path="../legacy/buffer.d.ts" />
 /// <reference path="../child_process.d.ts" />
 /// <reference path="../cluster.d.ts" />
 /// <reference path="../console.d.ts" />

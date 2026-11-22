@@ -24,6 +24,8 @@
 
 // NOTE: These definitions support Node.js and TypeScript 5.7.
 
+/// <reference path="../select/full-environment.d.ts" />
+
 // Reference required TypeScript libraries:
 /// <reference lib="es2020" />
 /// <reference lib="esnext.disposable" />

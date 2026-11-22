@@ -1,3 +1,4 @@
+/// <reference path="./select/zlib-builtins.d.ts" />
 /// <reference path="./buffer.d.ts" />
 /// <reference path="./stream.d.ts" />
 declare module "node:zlib" {

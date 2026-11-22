@@ -13,7 +13,7 @@ declare module "node:worker_threads" {
     import { URL } from "node:url";
     import { CPUProfileHandle, CPUProfileOptions, HeapInfo, HeapProfileHandle, HeapProfileOptions } from "node:v8";
     import { Context } from "node:vm";
-    import { MessageEvent } from "undici-types";
+    import { MessageEvent } from "node/select/undici.js";
     const isInternalThread: boolean;
     const isMainThread: boolean;
     const parentPort: null | MessagePort;

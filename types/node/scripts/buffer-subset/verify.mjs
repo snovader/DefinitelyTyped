@@ -12,6 +12,7 @@ const nodeDir = resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const { values } = parseArgs({ options: {
     baseline: { type: "string", default: "9b0ad8df8337133ee935159e5edf8947b1064085" },
+    "globals-only": { type: "boolean" },
     "zlib-only": { type: "boolean" },
     "overloads-only": { type: "boolean" },
     tsc: { type: "string", default: require.resolve("typescript/bin/tsc") },
@@ -64,7 +65,9 @@ function surface(ts, dir, types, lib) {
         }).sort(([a], [b]) => a.localeCompare(b));
         return [module.name, members];
     }));
-    return { globals, modules };
+    const nodeNamespace = checker.resolveName("NodeJS", program.getSourceFile(entry), flags.Namespace, false);
+    const nodeNames = nodeNamespace ? checker.getExportsOfModule(nodeNamespace).map(member => member.name).sort() : [];
+    return { globals, modules, nodeNames };
 }
 
 function checkSelectorSurface(ts, lib) {
@@ -72,6 +75,18 @@ function checkSelectorSurface(ts, lib) {
     const subset = surface(ts, targets[1], ["node/buffer"], lib);
     const legacy = surface(ts, targets[0], ["node"], lib);
     const full = surface(ts, targets[1], ["node"], lib);
+    const globals = surface(ts, targets[1], ["node/globals"], lib);
+    assert.deepEqual(globals.globals, legacy.globals);
+    assert.deepEqual(globals.nodeNames, legacy.nodeNames);
+    assert.deepEqual(full.nodeNames, legacy.nodeNames);
+    const dependencies = [
+        "async_hooks", "buffer", "child_process", "console", "crypto", "dgram", "dns", "dns/promises",
+        "events", "fs", "fs/promises", "http", "module", "net", "perf_hooks", "process", "querystring",
+        "readline", "readline/promises", "stream", "stream/iter", "stream/promises", "stream/web", "timers",
+        "timers/promises", "tls", "tty", "url", "util", "util/types", "v8", "vm", "worker_threads",
+    ];
+    const builtins = [...globals.modules.keys()].map(name => JSON.parse(name)).filter(name => name.startsWith("node:"));
+    assert.deepEqual(builtins.sort(), dependencies.map(name => "node:" + name).sort());
     assert.deepEqual(full.globals, legacy.globals);
     for (const [name, members] of legacy.modules) assert.deepEqual(full.modules.get(name), members, name);
     assert.deepEqual(subset.globals, empty.globals);
@@ -158,7 +173,9 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", 
         assert.ok(!filesRead.some(f => f.includes("/undici-types/")));
         bufferCounts.add(loaded.length);
     }
-    return { files: filesRead, diagnostics, declaration: readFileSync(join(dir, "out", (comparison?.emit ?? files[0]) + ".d.ts"), "utf8") };
+    const emitted = join(dir, "out", (comparison?.emit ?? files[0]) + ".d.ts");
+    assert.ok(existsSync(emitted) || diagnostics, "missing declaration output");
+    return { files: filesRead, diagnostics, declaration: existsSync(emitted) ? readFileSync(emitted, "utf8") : undefined };
 }
 
 function checkZlibIdentity(ts, types) {
@@ -179,7 +196,7 @@ function checkZlibIdentity(ts, types) {
 }
 
 const zlibDependencies = [
-    "zlib.d.ts", "stream.d.ts", "stream/iter.d.ts", "stream/promises.d.ts", "events.d.ts", "select/async-hooks.d.ts", "select/async-hooks-core.d.ts",
+    "select/optional-builtins.d.ts", "select/zlib-builtins.d.ts", "zlib.d.ts", "stream.d.ts", "stream/iter.d.ts", "stream/promises.d.ts", "events.d.ts", "select/async-hooks.d.ts", "select/async-hooks-core.d.ts",
     "select/emitter.d.ts", "select/stream-types.d.ts", "select/zlib-bindings.d.ts", "select/zlib-nodejs.d.ts",
 ];
 
@@ -233,6 +250,101 @@ function checkZlib(host, mode, roots, bufferFiles, lib = "ESNext") {
         }
     }
 }
+
+function checkGlobals() {
+    const [baseline, candidate] = targets;
+    const fixture = { files: ["globals-api"] };
+    const test = (dir, types, fixture, host = "", mode = "nodenext", roots = false) =>
+        compile(dir, types, host, mode, roots, false, "ESNext", fixture);
+    const packages = result => new Set(result.files.filter(file => file.includes("/node_modules/undici-types/"))
+        .map(file => basename(file)));
+    const fullEntry = files => files.some(file => /^(?:ts5\.[67]\/)?index\.d\.ts$/.test(file));
+    const stock = test(candidate, ["node/globals"], fixture);
+    const base = test(baseline, ["node"], fixture);
+    assert.equal(base.diagnostics, "");
+    assert.equal(stock.diagnostics, base.diagnostics);
+    assert.equal(stock.declaration, base.declaration);
+    assert.ok(fullEntry(nodeFiles(candidate, stock.files)), "stock Undici references the full Node entry");
+    const stockFull = test(candidate, ["node"], fixture);
+    assert.equal(stockFull.declaration, base.declaration);
+    assert.equal(stockFull.diagnostics, base.diagnostics);
+    applyUndiciPatch(candidate);
+    checkBuiltinRegistry();
+    const expectedUndici = new Set(["client-stats", "client", "connector", "dispatcher", "errors", "eventsource",
+        "fetch", "formdata", "header", "patch", "readable", "utility", "websocket"].map(name => name + ".d.ts"));
+    for (const [host, mode, roots] of [["", "nodenext", false], ["DOM", "bundler", true],
+        ["WebWorker", "nodenext-esm", false], ["", "nodenext-esm", false]]) {
+        const upstream = test(baseline, ["node"], fixture, host, mode, roots);
+        for (const types of [["node/globals"], ["node/buffer", "node/globals"], ["node/globals", "node/buffer"],
+            ["node"], ["node/globals", "node"], ["node", "node/globals"]]) {
+            const result = test(candidate, types, fixture, host, mode, roots);
+            const context = types.join("+") + " " + (host || "ES") + " " + mode;
+            assert.equal(result.diagnostics, upstream.diagnostics, context);
+            // Without the Undici barrel, the emitter names the same Headers class by its defining module.
+            const fetchModule = mode === "nodenext-esm" ? "undici-types/fetch.js" : "undici-types/fetch";
+            const expected = types.includes("node") ? upstream.declaration
+                : upstream.declaration.replace('import("undici-types").Headers', `import("${fetchModule}").Headers`);
+            assert.equal(result.declaration, expected, context + " globals emit");
+            if (types.length === 1 && types[0] === "node/globals" && !host) {
+                writeFileSync(join(candidate, "fixtures/globals-emitted.d.ts"), result.declaration);
+                const downstream = test(candidate, types, { files: ["use-globals-output"] }, host, mode, roots);
+                assert.equal(downstream.diagnostics, "", "consume emitted global types in " + mode);
+                assert.ok(!fullEntry(nodeFiles(candidate, downstream.files)));
+            }
+            const files = nodeFiles(candidate, result.files);
+            assert.equal(fullEntry(files), types.includes("node"), context);
+            if (!types.includes("node")) {
+                assert.deepEqual(packages(result), expectedUndici);
+                for (const file of ["zlib", "http2", "inspector", "test", "sqlite", "path", "assert", "wasi"]) {
+                    assert.ok(!files.includes(file + ".d.ts"), context + " loaded " + file);
+                }
+            }
+            if (!host && mode === "nodenext" && types.length === 1) {
+                console.log(version + " " + types[0] + " loaded " + files.length + " Node and "
+                    + packages(result).size + " Undici declaration files.");
+            }
+        }
+    }
+    const scoped = test(candidate, ["node/globals"], { files: ["globals-isolation"] });
+    assert.equal(scoped.diagnostics, "");
+    for (const types of [["node/globals", "node/zlib"], ["node/zlib", "node/globals"], ["node"]]) {
+        const zlib = { files: ["globals-zlib"] };
+        const result = test(candidate, types, zlib);
+        const base = test(baseline, ["node"], zlib);
+        assert.equal(base.diagnostics, "");
+        assert.equal(result.diagnostics, "");
+        assert.equal(result.declaration, base.declaration);
+        assert.equal(fullEntry(nodeFiles(candidate, result.files)), types.includes("node"));
+    }
+}
+
+// Derive the keys independently from the unmodified baseline. Compile calls to
+// every spelling so dropping a key cannot silently select the string overload.
+function checkBuiltinRegistry() {
+    const source = readFileSync(join(packageDir(targets[0]), "process.d.ts"), "utf8");
+    const names = [...source.matchAll(/^        "([^"]+)": typeof import\("/gm)].map(match => match[1]);
+    assert.ok(names.includes("node:sqlite") && names.includes("zlib"));
+    const fixture = names.map(name => `process.getBuiltinModule("${name}") satisfies typeof import("${name}");`).join("\n")
+        + "\nexport {};\n";
+    for (const dir of targets) writeFileSync(join(dir, "fixtures/all-builtins.ts"), fixture);
+    for (const file of ["all-builtins", "extracted-lookup"]) {
+        const compare = (dir, types) => compile(dir, types, "", "nodenext", false, false, "ESNext", { files: [file] });
+        const base = compare(targets[0], ["node"]);
+        if (file === "all-builtins") assert.equal(base.diagnostics, "");
+        for (const types of [["node"], ["node/globals", "node"], ["node", "node/globals"]]) {
+            const result = compare(targets[1], types);
+            assert.equal(result.diagnostics, base.diagnostics, file);
+            assert.equal(result.declaration, base.declaration, file);
+        }
+    }
+}
+
+function applyUndiciPatch(dir) {
+    const cwd = join(dir, "node_modules/undici-types");
+    assert.equal(JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).version, "8.9.0");
+    execFileSync("patch", ["-s", "-p1", "-i", join(here, "undici-types-8.9.0.patch")], { cwd });
+}
+
 function checkSelectors() {
     if (compiler === require.resolve("typescript/bin/tsc")) {
         const upstream = bufferSignatures(targets[0]);
@@ -275,7 +387,7 @@ function checkSelectors() {
                 const base = compile(targets[0], ["node"], host, mode, roots);
                 if (base.diagnostics) baselineErrors.add((host || "ES") + " " + [...base.diagnostics.matchAll(/error (TS\d+)/g)].map(match => match[1]).join(","));
                 let full;
-                for (const selection of [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"]]) {
+                for (const selection of [["node"], ["node/zlib", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"]]) {
                     const actual = compile(targets[1], selection, host, mode, roots);
                     assert.equal(actual.diagnostics, base.diagnostics, selection.join("+") + " diagnostics");
                     assert.equal(actual.declaration, base.declaration, selection.join("+") + " declaration emit");
@@ -296,8 +408,10 @@ function checkSelectors() {
 
 try {
     stage();
-    if (!values["overloads-only"]) checkSelectors();
-    if (!values["zlib-only"]) checkOverloadOrder();
+    if (values["globals-only"] || (!values["zlib-only"] && !values["overloads-only"])) checkGlobals();
+    else applyUndiciPatch(targets[1]);
+    if (!values["globals-only"] && !values["overloads-only"]) checkSelectors();
+    if (!values["globals-only"] && !values["zlib-only"]) checkOverloadOrder();
 } finally {
     rmSync(tmp, { recursive: true, force: true });
 }
@@ -310,7 +424,7 @@ function checkOverloadOrder() {
         ["load-node-first", "order", "order-peer"],
         ["order-peer", "load-node-first", "order"],
     ];
-    const selections = [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"], ["node/zlib", "node/globals"], ["node", "node/zlib"]];
+    const selections = [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"], ["node/zlib", "node/globals"], ["node", "node/zlib"], ["node", "node/globals"], ["node/globals", "node"]];
     const baselineDeclarations = new Set();
     for (const files of orders) {
         const comparison = { files, emit: "order" };

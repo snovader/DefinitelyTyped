@@ -1,11 +1,9 @@
-import type * as Bytes from "node/select/byte-types.js";
-import type { Buffer, BufferEncoding, WithImplicitCoercion } from "./buffer-core.js";
+import type { Buffer, BufferEncoding, TypedArray } from "node/select/buffer-bindings.js";
+import type { ImplicitArrayBuffer, WithImplicitCoercion } from "node:buffer";
 
-export type ImplicitArrayBuffer<T extends WithImplicitCoercion<ArrayBufferLike>> = T extends
-    { valueOf(): infer V extends ArrayBufferLike } ? V : T;
-declare module "./buffer-core.js" {
+declare module "./buffer-target.js" {
     interface BufferConstructor {
-        // see buffer.d.ts for implementation shared with all TypeScript versions
+        // see select/buffer-core.d.ts for members shared with all TypeScript versions
 
         /**
          * Allocates a new buffer containing the given {str}.
@@ -224,7 +222,7 @@ declare module "./buffer-core.js" {
          * @param [offset=0] The starting offset within `view`.
          * @param [length=view.length - offset] The number of elements from `view` to copy.
          */
-        copyBytesFrom(view: Bytes.TypedArray, offset?: number, length?: number): Buffer<ArrayBuffer>;
+        copyBytesFrom(view: TypedArray, offset?: number, length?: number): Buffer<ArrayBuffer>;
         /**
          * Allocates a new `Buffer` of `size` bytes. If `fill` is `undefined`, the`Buffer` will be zero-filled.
          *
@@ -356,7 +354,7 @@ declare module "./buffer-core.js" {
         allocUnsafeSlow(size: number): Buffer<ArrayBuffer>;
     }
     interface Buffer<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> extends Uint8Array<TArrayBuffer> {
-        // see buffer.d.ts for implementation shared with all TypeScript versions
+        // see select/buffer-core.d.ts for members shared with all TypeScript versions
 
         /**
          * Returns a new `Buffer` that references the same memory as the original, but
@@ -454,19 +452,3 @@ declare module "./buffer-core.js" {
         subarray(start?: number, end?: number): Buffer<TArrayBuffer>;
     }
 }
-// TODO: remove globals in future version
-/**
- * @deprecated This is intended for internal use, and will be removed once `@types/node` no longer supports
- * TypeScript versions earlier than 5.7.
- */
-export type NonSharedBuffer = Buffer<ArrayBuffer>;
-/**
- * @deprecated This is intended for internal use, and will be removed once `@types/node` no longer supports
- * TypeScript versions earlier than 5.7.
- */
-export type AllowSharedBuffer = Buffer<ArrayBufferLike>;
-/**
- * @deprecated This is intended for internal use, and will be removed once `@types/node` no longer supports
- * TypeScript versions earlier than 5.7.
- */
-export type BufferView<T extends Bytes.ArrayBufferView> = T extends Bytes.ArrayBufferView<infer B> ? Buffer<B> : never;

@@ -1,7 +1,7 @@
-import type * as Bytes from "node/select/byte-types.js";
-import type { Buffer, BufferEncoding, WithImplicitCoercion } from "../buffer-core.js";
+import type { Buffer, BufferEncoding, TypedArray } from "node/select/buffer-bindings.js";
+import type { WithImplicitCoercion } from "node:buffer";
 
-declare module "../buffer-core.js" {
+declare module "../buffer-target.js" {
     interface BufferConstructor {
         // see ../buffer.d.ts for implementation shared with all TypeScript versions
 
@@ -221,7 +221,7 @@ declare module "../buffer-core.js" {
          * @param [offset=0] The starting offset within `view`.
          * @param [length=view.length - offset] The number of elements from `view` to copy.
          */
-        copyBytesFrom(view: Bytes.TypedArray, offset?: number, length?: number): Buffer;
+        copyBytesFrom(view: TypedArray, offset?: number, length?: number): Buffer;
         /**
          * Allocates a new `Buffer` of `size` bytes. If `fill` is `undefined`, the`Buffer` will be zero-filled.
          *
@@ -451,18 +451,3 @@ declare module "../buffer-core.js" {
         subarray(start?: number, end?: number): Buffer;
     }
 }
-/**
- * @deprecated This is intended for internal use, and will be removed once `@types/node` no longer supports
- * TypeScript versions earlier than 5.7.
- */
-export type NonSharedBuffer = Buffer;
-/**
- * @deprecated This is intended for internal use, and will be removed once `@types/node` no longer supports
- * TypeScript versions earlier than 5.7.
- */
-export type AllowSharedBuffer = Buffer;
-/**
- * @deprecated This is intended for internal use, and will be removed once `@types/node` no longer supports
- * TypeScript versions earlier than 5.7.
- */
-export type BufferView<T extends Bytes.ArrayBufferView> = Buffer;

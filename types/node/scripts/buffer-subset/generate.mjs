@@ -2,8 +2,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import ts from "typescript";
-
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const check = process.argv.includes("--check");
 const source = name => readFile(join(root, name), "utf8");
@@ -34,83 +32,6 @@ function unindent(text, spaces) {
     return text.replace(new RegExp("^ {" + spaces + "}", "gm"), "");
 }
 
-// Both profiles use the same authored Buffer members. Rebuild the historical
-// declaration scopes without reprinting overloads, JSDoc, or deprecated APIs.
-function parse(name, text) {
-    const file = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    if (file.parseDiagnostics.length) throw new Error("Cannot parse " + name);
-    return file;
-}
-
-function indent(text, spaces) {
-    return text.replace(/^(.+)$/gm, " ".repeat(spaces) + "$1");
-}
-
-function legacyText(statement, file) {
-    return statement.getFullText(file).trim().replaceAll("Bytes.", "NodeJS.");
-}
-
-async function legacyOutput(name, lines) {
-    await writeOrCheck(join(root, name), lines.join("\n") + "\n");
-}
-
-const common = parse("buffer-core.d.ts", await source("select/buffer-core.d.ts"));
-const commonOutput = ['declare module "node:buffer" {'];
-const legacyGlobalNames = new Set(["Buffer", "BufferConstructor", "BufferEncoding"]);
-let inGlobal = false;
-for (const statement of common.statements) {
-    if (ts.isImportDeclaration(statement)) {
-        const specifier = statement.moduleSpecifier.text;
-        if (specifier !== "node/select/byte-types.js" && specifier !== "node:buffer") {
-            commonOutput.push(indent(legacyText(statement, common).replace(/^import type /, "import "), 4));
-        }
-        continue;
-    }
-    const name = ts.isVariableStatement(statement)
-        ? statement.declarationList.declarations[0].name.getText(common)
-        : statement.name.getText(common);
-    if (name === "WithImplicitCoercion") {
-        commonOutput.push("    export { type AllowSharedBuffer, Buffer, type NonSharedBuffer };");
-    }
-    if (!inGlobal && legacyGlobalNames.has(name)) {
-        inGlobal = true;
-        commonOutput.push("    global {", "        namespace NodeJS {", "            export { BufferEncoding };",
-            "        }", "        // Buffer class");
-    }
-    if (inGlobal && !legacyGlobalNames.has(name)) {
-        inGlobal = false;
-        commonOutput.push("    }");
-    }
-    if (name === "atob" || name === "btoa") {
-        commonOutput.push("    export import " + name + " = globalThis." + name + ";");
-    } else {
-        const text = legacyText(statement, common);
-        commonOutput.push(indent(inGlobal ? text.replace(/^export /m, "") : text, inGlobal ? 8 : 4));
-    }
-}
-commonOutput.push("    // #endregion", "}", 'declare module "buffer" {', '    export * from "node:buffer";', "}");
-await legacyOutput("legacy/buffer.d.ts", commonOutput);
-
-for (const version of ["", "ts5.6/"]) {
-    const input = "select/" + version + "buffer-version.d.ts";
-    const file = parse(input, await source(input));
-    const lines = ['declare module "node:buffer" {'];
-    for (const statement of file.statements) {
-        if (ts.isImportDeclaration(statement)) continue;
-        if (ts.isModuleDeclaration(statement)) {
-            lines.push("    global {");
-            for (const member of statement.body.statements) lines.push(indent(legacyText(member, file).replace(/\n {4}/g, "\n"), 8));
-        } else {
-            const name = statement.name.getText(file);
-            if (name === "BufferView") lines.push("    }");
-            const globalAlias = name === "NonSharedBuffer" || name === "AllowSharedBuffer";
-            lines.push(indent(legacyText(statement, file).replace(/^export /m, ""), globalAlias ? 8 : 4));
-        }
-    }
-    lines.push("}");
-    await legacyOutput(version + "buffer.buffer.d.ts", lines);
-}
-
 for (const legacy of [false, true]) {
     const prefix = legacy ? "ts5.6/" : "";
     const arrayBody = unindent(between(await source(prefix + "globals.typedarray.d.ts"), "    namespace NodeJS {\n", "\n    }\n}"), 8);
@@ -120,13 +41,6 @@ for (const legacy of [false, true]) {
     const shim = await source((legacy ? "ts5.6" : "ts5.7") + "/compatibility/float16array.d.ts");
     await emit(prefix + "select/byte-types.d.ts", shim + "\n" + arrayTypes);
 }
-
-const web = unindent(between(await source("stream/web.d.ts"), 'declare module "node:stream/web" {\n', '\n}\ndeclare module "stream/web"'), 4);
-const stream = web.replace('from "node:util"', 'from "./stream-dependencies.js"')
-    .replaceAll("NodeJS.AsyncIterator", "NodeAsyncIterator").replaceAll("NodeJS.", "Bytes.")
-    .replace(/^(type|interface|var|function) /gm, "export $1 ");
-await emit("select/stream-web.d.ts", 'import type * as Bytes from "node/select/byte-types.js";\n' +
-    'import type { HostAbortSignal as AbortSignal, NodeAsyncIterator } from "./stream-dependencies.js";\n' + stream);
 
 const util = await source("util.d.ts");
 const encoding = 'export interface TextDecoderCommon' + unindent(between(util,

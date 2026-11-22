@@ -12,6 +12,7 @@ const nodeDir = resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const { values } = parseArgs({ options: {
     baseline: { type: "string", default: "9b0ad8df8337133ee935159e5edf8947b1064085" },
+    "overloads-only": { type: "boolean" },
     tsc: { type: "string", default: require.resolve("typescript/bin/tsc") },
 } });
 const compiler = resolve(values.tsc);
@@ -69,27 +70,23 @@ function checkBufferSurface(lib) {
     const empty = surface(targets[1], [], lib);
     const subset = surface(targets[1], ["node/buffer"], lib);
     const legacy = surface(targets[0], ["node"], lib);
+    const full = surface(targets[1], ["node"], lib);
+    assert.deepEqual(full.globals, legacy.globals);
+    for (const [name, members] of legacy.modules) assert.deepEqual(full.modules.get(name), members, name);
     assert.deepEqual(subset.globals, empty.globals);
     const added = [...subset.modules.keys()].filter(name => !empty.modules.has(name)).sort();
     assert.deepEqual(added, ['"buffer"', '"node:buffer"', '"node:stream/web"', '"stream/web"']);
     for (const name of added) assert.deepEqual(subset.modules.get(name), legacy.modules.get(name), name);
 }
 
-// Compare every input to the legacy compiler program, in load order. Only the
-// two relocated files and the corresponding path directives may differ.
-function legacyGraph(dir, files) {
-    return files.map(file => {
-        const name = relative(dir, file).replaceAll(sep, "/").replace("/node/legacy/", "/node/");
-        let content = readFileSync(file, "utf8");
-        if (/node_modules\/@types\/node\/(ts5\.[67]\/)?index\.d\.ts$/.test(name)) {
-            content = content.replaceAll("legacy/buffer.d.ts", "buffer.d.ts").replaceAll("legacy/globals.d.ts", "globals.d.ts");
-        }
-        return [name, content];
-    });
+function nodeFiles(dir, files) {
+    return files.filter(file => file.startsWith(packageDir(dir) + sep)).map(file => relative(packageDir(dir), file));
 }
 
-function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext") {
-    const files = subset ? ["buffer", ...(oldBuffers || lib !== "ESNext" ? [] : ["modern"]), ...(host ? [] : ["es-only"]), ...(lib === "ES2020" ? ["es2020"] : [])] : ["legacy"];
+function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", comparison) {
+    const files = comparison?.files ?? (subset
+        ? ["buffer", ...(oldBuffers || lib !== "ESNext" ? [] : ["modern"]), ...(host ? [] : ["es-only"]), ...(lib === "ES2020" ? ["es2020"] : [])]
+        : ["legacy"]);
     const options = {
         target: "ESNext", module: mode === "bundler" ? "ESNext" : "NodeNext", moduleResolution: mode,
         lib: [lib, ...(host ? [host] : [])], strict: true, skipLibCheck: false, types, declaration: true,
@@ -112,16 +109,15 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext") 
     const diagnostics = lines.filter(line => !isInput(line)).join("\n").replaceAll(dir, "<consumer>");
     if (subset) assert.equal(diagnostics, "", types.join("+") + " " + host + " " + mode);
     if (subset) {
-        const loaded = filesRead.filter(f => f.startsWith(packageDir(dir) + sep)).map(f => relative(packageDir(dir), f));
-        assert.ok(loaded.length > 0 && loaded.every(f => /^(?:(?:ts5\.[67]\/)?(?:select\/|buffer\.d\.ts$))/.test(f)), String(loaded));
+        const loaded = nodeFiles(dir, filesRead);
+        assert.ok(loaded.length > 0 && loaded.every(f => /^(?:(?:ts5\.[67]\/)?(?:select\/|stream\/web\.d\.ts$|buffer(?:\.buffer)?\.d\.ts$))/.test(f)), String(loaded));
         assert.ok(!filesRead.some(f => f.includes("/undici-types/")));
         results.add(loaded.length);
     }
-    return { files: filesRead, diagnostics, declaration: readFileSync(join(dir, "out", files[0] + ".d.ts"), "utf8") };
+    return { files: filesRead, diagnostics, declaration: readFileSync(join(dir, "out", (comparison?.emit ?? files[0]) + ".d.ts"), "utf8") };
 }
 
-try {
-    stage();
+function checkSelectors() {
     if (compiler === require.resolve("typescript/bin/tsc")) {
         for (const libs of [["es2020"], ["esnext"], ["esnext", "dom"], ["esnext", "webworker"]]) {
             checkBufferSurface(libs);
@@ -131,28 +127,51 @@ try {
     for (const host of ["", "DOM", "WebWorker"]) {
         for (const mode of ["nodenext", "bundler"]) {
             for (const roots of [false, true]) {
-                compile(targets[1], ["node/buffer"], host, mode, roots, true);
+                const subset = compile(targets[1], ["node/buffer"], host, mode, roots, true);
+                const shared = nodeFiles(targets[1], subset.files);
                 const base = compile(targets[0], ["node"], host, mode, roots);
                 if (base.diagnostics) baselineErrors.add((host || "ES") + " " + [...base.diagnostics.matchAll(/error (TS\d+)/g)].map(match => match[1]).join(","));
-                const expected = legacyGraph(targets[0], base.files);
+                let full;
                 for (const selection of [["node"], ["node/globals"], ["node/buffer", "node/globals"], ["node", "node/buffer"], ["node/buffer", "node"]]) {
                     const actual = compile(targets[1], selection, host, mode, roots);
                     assert.equal(actual.diagnostics, base.diagnostics, selection.join("+") + " diagnostics");
                     assert.equal(actual.declaration, base.declaration, selection.join("+") + " declaration emit");
-                    if (selection.length === 1) {
-                        // Exclude only the additional selector, preserving the relocated legacy globals.
-                        const underlying = actual.files.filter(file => selection[0] === "node" ||
-                            !/^(ts5\.[67]\/)?globals\.d\.ts$/.test(relative(packageDir(targets[1]), file)));
-                        const graph = legacyGraph(targets[1], underlying);
-                        assert.deepEqual(graph.map(([name]) => name), expected.map(([name]) => name));
-                        for (let i = 0; i < expected.length; i++) assert.equal(graph[i][1], expected[i][1], expected[i][0]);
+                    const loaded = new Set(nodeFiles(targets[1], actual.files));
+                    for (const file of shared) assert.ok(loaded.has(file), selection.join("+") + " must load " + file);
+                    if (selection[0] === "node" && selection.length === 1) full = loaded;
+                    if (selection.includes("node") && selection.includes("node/buffer")) {
+                        assert.deepEqual(loaded, full, "combining selectors must load exactly the same Node files");
                     }
                 }
             }
         }
     }
-    console.log(version + " matched expectations in " + count + " consumer builds. Buffer-only loaded " + [...results].join("/") + " Node declaration files.");
+    console.log(version + " matched the baseline diagnostics and declaration emit for the selector fixtures across " + count
+        + " builds, including subset isolation checks. Buffer-only loaded " + [...results].join("/") + " Node declaration files.");
     if (baselineErrors.size) console.log("Inherited baseline diagnostics: " + [...baselineErrors].join(" / "));
+}
+
+try {
+    stage();
+    if (!values["overloads-only"]) checkSelectors();
+    const mismatches = [];
+    for (const files of [["order"], ["load-node-first", "order"]]) {
+        const comparison = { files, emit: "order" };
+        const base = compile(targets[0], ["node"], "", "nodenext", false, false, "ESNext", comparison);
+        const actual = compile(targets[1], ["node"], "", "nodenext", false, false, "ESNext", comparison);
+        assert.equal(actual.diagnostics, base.diagnostics);
+        if (actual.declaration !== base.declaration) {
+            const signatures = emitted => [...emitted.matchAll(/^export declare const (?:flag|decoded): [^\n]+(?:\n    [^\n]+\n\};)?/gm)]
+                .map(([declaration]) => declaration).join("\n");
+            mismatches.push(files.join(", ") + "\nupstream\n" + signatures(base.declaration) + "\nprototype\n" + signatures(actual.declaration));
+        }
+    }
+    if (mismatches.length) {
+        console.error(version + " failed declaration-emit parity for " + mismatches.length + " of 2 overload-order cases.\n" + mismatches.join("\n"));
+        process.exitCode = 1;
+    } else {
+        console.log(version + " matched both overload-order cases.");
+    }
 } finally {
     rmSync(tmp, { recursive: true, force: true });
 }

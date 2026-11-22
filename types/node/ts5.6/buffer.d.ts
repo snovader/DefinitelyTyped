@@ -1,1 +1,1 @@
-/// <reference path="../select/register.d.ts" />
+/// <reference path="../buffer.d.ts" />

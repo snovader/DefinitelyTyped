@@ -1,5 +1,15 @@
 declare module "node:stream/web" {
-    import { TextDecoderCommon, TextDecoderOptions, TextEncoderCommon } from "node:util";
+    import type {
+        AbortSignal,
+        AsyncIterator,
+        BufferSource,
+        ByteTypes,
+        NonSharedArrayBufferView,
+        NonSharedUint8Array,
+        TextDecoderCommon,
+        TextDecoderOptions,
+        TextEncoderCommon,
+    } from "node/select/buffer-bindings.js";
     type CompressionFormat = "brotli" | "deflate" | "deflate-raw" | "gzip";
     type ReadableStreamController<T> = ReadableStreamDefaultController<T> | ReadableByteStreamController;
     type ReadableStreamReader<T> = ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader;
@@ -119,17 +129,17 @@ declare module "node:stream/web" {
     interface UnderlyingSourceStartCallback<R> {
         (controller: ReadableStreamController<R>): any;
     }
-    interface ByteLengthQueuingStrategy extends QueuingStrategy<NodeJS.ArrayBufferView> {
+    interface ByteLengthQueuingStrategy extends QueuingStrategy<ByteTypes.ArrayBufferView> {
         readonly highWaterMark: number;
-        readonly size: QueuingStrategySize<NodeJS.ArrayBufferView>;
+        readonly size: QueuingStrategySize<ByteTypes.ArrayBufferView>;
     }
     var ByteLengthQueuingStrategy: {
         prototype: ByteLengthQueuingStrategy;
         new(init: QueuingStrategyInit): ByteLengthQueuingStrategy;
     };
     interface CompressionStream extends GenericTransformStream {
-        readonly readable: ReadableStream<NodeJS.NonSharedUint8Array>;
-        readonly writable: WritableStream<NodeJS.BufferSource>;
+        readonly readable: ReadableStream<NonSharedUint8Array>;
+        readonly writable: WritableStream<BufferSource>;
     }
     var CompressionStream: {
         prototype: CompressionStream;
@@ -144,8 +154,8 @@ declare module "node:stream/web" {
         new(init: QueuingStrategyInit): CountQueuingStrategy;
     };
     interface DecompressionStream extends GenericTransformStream {
-        readonly readable: ReadableStream<NodeJS.NonSharedUint8Array>;
-        readonly writable: WritableStream<NodeJS.BufferSource>;
+        readonly readable: ReadableStream<NonSharedUint8Array>;
+        readonly writable: WritableStream<BufferSource>;
     }
     var DecompressionStream: {
         prototype: DecompressionStream;
@@ -155,7 +165,7 @@ declare module "node:stream/web" {
         readonly byobRequest: ReadableStreamBYOBRequest | null;
         readonly desiredSize: number | null;
         close(): void;
-        enqueue(chunk: NodeJS.NonSharedArrayBufferView): void;
+        enqueue(chunk: NonSharedArrayBufferView): void;
         error(e?: any): void;
     }
     var ReadableByteStreamController: {
@@ -179,16 +189,16 @@ declare module "node:stream/web" {
         new(
             underlyingSource: UnderlyingByteSource,
             strategy?: { highWaterMark?: number },
-        ): ReadableStream<NodeJS.NonSharedUint8Array>;
+        ): ReadableStream<NonSharedUint8Array>;
         new<R = any>(underlyingSource: UnderlyingDefaultSource<R>, strategy?: QueuingStrategy<R>): ReadableStream<R>;
         new<R = any>(underlyingSource?: UnderlyingSource<R>, strategy?: QueuingStrategy<R>): ReadableStream<R>;
         from<R = any>(iterable: Iterable<R> | AsyncIterable<R>): ReadableStream<R>;
     };
-    interface ReadableStreamAsyncIterator<T> extends NodeJS.AsyncIterator<T, BuiltinIteratorReturn, unknown> {
+    interface ReadableStreamAsyncIterator<T> extends AsyncIterator<T, BuiltinIteratorReturn, unknown> {
         [Symbol.asyncIterator](): ReadableStreamAsyncIterator<T>;
     }
     interface ReadableStreamBYOBReader extends ReadableStreamGenericReader {
-        read<T extends NodeJS.NonSharedArrayBufferView>(
+        read<T extends NonSharedArrayBufferView>(
             view: T,
             options?: ReadableStreamBYOBReaderReadOptions,
         ): Promise<ReadableStreamReadResult<T>>;
@@ -196,12 +206,12 @@ declare module "node:stream/web" {
     }
     var ReadableStreamBYOBReader: {
         prototype: ReadableStreamBYOBReader;
-        new(stream: ReadableStream<NodeJS.NonSharedUint8Array>): ReadableStreamBYOBReader;
+        new(stream: ReadableStream<NonSharedUint8Array>): ReadableStreamBYOBReader;
     };
     interface ReadableStreamBYOBRequest {
-        readonly view: NodeJS.NonSharedArrayBufferView | null;
+        readonly view: NonSharedArrayBufferView | null;
         respond(bytesWritten: number): void;
-        respondWithNewView(view: NodeJS.NonSharedArrayBufferView): void;
+        respondWithNewView(view: NonSharedArrayBufferView): void;
     }
     var ReadableStreamBYOBRequest: {
         prototype: ReadableStreamBYOBRequest;
@@ -227,14 +237,14 @@ declare module "node:stream/web" {
     };
     interface TextDecoderStream extends GenericTransformStream, TextDecoderCommon {
         readonly readable: ReadableStream<string>;
-        readonly writable: WritableStream<NodeJS.BufferSource>;
+        readonly writable: WritableStream<BufferSource>;
     }
     var TextDecoderStream: {
         prototype: TextDecoderStream;
         new(label?: string, options?: TextDecoderOptions): TextDecoderStream;
     };
     interface TextEncoderStream extends GenericTransformStream, TextEncoderCommon {
-        readonly readable: ReadableStream<NodeJS.NonSharedUint8Array>;
+        readonly readable: ReadableStream<NonSharedUint8Array>;
         readonly writable: WritableStream<string>;
     }
     var TextEncoderStream: {

@@ -1,6 +1,7 @@
 import { atob as decode, Blob, Buffer as NodeBuffer } from "node:buffer";
 import { Buffer as BareBuffer } from "buffer";
 import proc from "node:process";
+import type { ByteLengthQueuingStrategy } from "node:stream/web";
 import { gzipSync } from "node:zlib";
 
 declare global {
@@ -25,3 +26,12 @@ export const buffer = BareBuffer.from("hello");
 export const streams = new Blob([buffer]).stream();
 export const filesystem = process.getBuiltinModule("node:fs");
 export { encoding, env, globalValue, method, overloaded, value };
+
+export function checkedEncoding(input: string) {
+    if (NodeBuffer.isEncoding(input)) return input;
+    throw new Error("Invalid encoding");
+}
+export const bytes = (blob: Blob) => blob.bytes();
+export const slices = buffer.subarray;
+
+export const queueSize = (strategy: ByteLengthQueuingStrategy) => strategy.size;

@@ -1,6 +1,6 @@
-# Buffer-only Node declarations
+# Selecting Buffer declarations
 
-This local prototype targets the current Node 26 declarations. A TypeScript consumer with this checkout's Node package installed can select Buffer with the following configuration.
+This prototype targets the Node 26 declarations. With this checkout installed as `@types/node`, a consumer can use the following configuration.
 
 ```json
 {
@@ -10,35 +10,34 @@ This local prototype targets the current Node 26 declarations. A TypeScript cons
 }
 ```
 
-Use `import { Buffer } from "node:buffer"` or its existing `"buffer"` alias. The real `Blob.stream()` signature also makes `"node:stream/web"` and `"stream/web"` available. The Buffer entry point works with ES2020 libraries or newer and adds no standard libraries of its own. Node globals, Web globals and unrelated built-in modules are absent unless another input to the program supplies them.
+Import `Buffer` from `node:buffer` or `buffer`. The real `Blob.stream()` signature also brings in `node:stream/web` and `stream/web`. With ES2020 or later, this selector adds no unqualified globals. Add `node/globals` to opt into the Node global environment. That selector currently references the full package, including the built-ins exposed by `process.getBuiltinModule()` and the Fetch dependencies. Other module selectors are outside this prototype.
 
-Add `"node/globals"` to opt in to the existing Node global environment. This prototype delegates that selector to the full Node entry point. Global `process.getBuiltinModule()` exposes built-ins by name, and the Fetch declarations depend on `undici-types`, which explicitly references `node`. Other module selectors, including `node/zlib`, are outside this prototype.
+## How the declarations are shared
 
-## Source and compatibility
+Both selectors reach the same `select/register.d.ts` for the public Buffer module, `select/buffer-core.d.ts` for common methods, and `select/buffer-version.d.ts` or its TypeScript 5.6 counterpart for compiler-specific overloads. They load the same `stream/web.d.ts`. The generator only handles the small module-local dependencies extracted from existing Node and Web globals.
 
-The shared Buffer API lives in `select/buffer-core.d.ts`. The real compiler-specific overloads live in `select/buffer-version.d.ts` and `select/ts5.6/buffer-version.d.ts`. Edit these files to change Buffer. Both the Buffer-only and full Node profiles derive from them.
+In Buffer-only mode, `select/buffer-bindings.d.ts` owns the module-local Buffer interfaces. Full Node additionally loads `buffer-globals.d.ts` and `select/global-buffer-bindings.d.ts`. The latter registers an ambient module under the same internal bindings specifier, so the shared declarations use the global interfaces and original Node and Web type names. The shared method declarations augment a star re-export of the two Buffer interfaces. This lets new methods added by a consumer reach the global Buffer, the imported Buffer, and the bare module alias.
 
-The generator reconstructs the historical global and module scopes for the full Node profile. Keeping those scopes preserves declaration merging, overload order, and the public names TypeScript emits in consumers' declaration files. It also extracts ordinary module-scoped copies of the web-stream, typed-array, encoding and event declarations needed by Buffer. Keeping generated declarations in the checkout lets the package work without a consumer build step.
+## Compatibility result
 
-In Buffer-only mode, TypeScript can name `node/select/stream-web` and `node/select/byte-types` in a library's emitted declarations when it infers a stream return type. Those paths ship in the package. Full Node keeps its historical declaration emit.
+In the regular selector fixtures, full Node matches upstream diagnostics and emitted consumer declarations. The fixtures exercise instance and static extensions, global assignment, a function overload, inferred encodings, streams and typed arrays. The full and subset file lists overlap on every implementation file. On TypeScript 6.0.3, Buffer-only loads 14 Node declaration files and full Node loads all 14 among its 96 files.
 
-The small `select/register.d.ts` registers the built-in module names through star re-exports. TypeScript gives the existing direct exports precedence when a consumer also loads full Node. The package keeps its upstream `typesVersions` configuration, including the TypeScript 5.6 and 5.7 routes.
+**Overlapping consumer overloads still expose a compatibility difference.** The `order.ts` fixture adds a narrower `Buffer.readUInt8` overload for a branded numeric offset and a narrower `BufferConstructor.from` overload for a branded string. When the consumer is loaded first, the emitted declarations match upstream. When `load-node-first.ts` references Node before the consumer augmentation, upstream infers `0 | 1` for the read and a Buffer with a `decoded` property for the conversion. This prototype infers `number` and an ordinary Buffer. The difference affects inference in application code as well as its emitted public types.
+
+The TypeScript 6 checker processes global augmentations before external-module augmentations. In upstream, the built-in and consumer overloads participate in the global pass. Here the built-ins enter through a module augmentation, so the relative order can change. This limits exact compatibility for the shared-declaration design in this checkout. [TypeScript 6.0.3 checker](https://github.com/microsoft/TypeScript/blob/v6.0.3/src/compiler/checker.ts#L51001-L51055)
 
 ## Reproduce
 
-Run these commands from `types/node` with the checkout's TypeScript and `undici-types` dependencies available.
+Run from `types/node`, with the checkout's TypeScript and `undici-types` dependencies installed.
 
 ```sh
 node scripts/buffer-subset/generate.mjs --check
 node scripts/buffer-subset/verify.mjs
+node scripts/buffer-subset/verify.mjs --overloads-only
 ```
 
-Omit `--check` to regenerate declarations. To verify another compiler, pass `--tsc /absolute/path/to/tsc`. The verifier stages separate baseline and candidate packages with their own copy of `undici-types`. Its default baseline is upstream commit `9b0ad8df8337133ee935159e5edf8947b1064085`.
+The verifier stages isolated copies of upstream commit `9b0ad8df8337133ee935159e5edf8947b1064085` and the working tree. Pass `--tsc /absolute/path/to/tsc` to select a compiler. For each compiler, the regular suite runs 85 consumer builds using ES, DOM and Web Worker libraries, NodeNext and Bundler resolution, and implicit and explicit type roots. It compares upstream diagnostics and emitted declarations byte for byte for the full selectors, checks the subset file list against the full selector, and verifies that combining selectors adds no second implementation. With the checkout's TypeScript it also compares the subset's global names against an empty selection and its built-in module export names against upstream.
 
-The verifier compares every compiler input for full Node in load order and checks its contents, allowing the two legacy file relocations and their reference paths. It compares emitted consumer declarations and exercises global augmentations, both selector orders, NodeNext and Bundler resolution, explicit type roots, and ES-only, DOM and Web Worker environments with library checking enabled. Existing baseline diagnostics must match.
+On TypeScript 5.6.3, 5.7.3, 5.9.3, 6.0.3 and 7.1.0-dev.20261121.1 the regular fixtures passed, including matching upstream TS2430 diagnostics in the TypeScript 5.7.3 DOM and Web Worker configurations. All five compilers exhibited the overload-order difference. The upstream DOM, non-DOM and Web Worker test projects also compiled on TypeScript 5.9.3.
 
-## Observed results
-
-TypeScript 5.6.3, 5.7.3, 5.9.3, 6.0.3, and 7.1.0-dev.20261121.1 each matched the expected results across 85 consumer builds. TypeScript 5.7.3 reports TS2430 in the baseline DOM and Web Worker libraries with full Node. The candidate produces identical diagnostics. The Buffer-only cases compile cleanly.
-
-On TypeScript 6.0.3, Buffer-only loads 10 Node declaration files and full Node loads 83. The compiler API found the same unqualified global names before and after enabling Buffer-only. The available built-in modules were exactly `buffer`, `node:buffer`, `stream/web`, and `node:stream/web`, with the same export names as upstream. The upstream Node DOM, non-DOM and Web Worker test projects also compiled with TypeScript 5.9.3 on both checkouts.
+The last four builds compare the two overload-order cases against upstream and exit nonzero on a difference. Both the full verifier and `--overloads-only` enforce this check.

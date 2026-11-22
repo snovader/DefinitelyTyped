@@ -31,6 +31,7 @@
 /// <reference path="../module.d.ts" />
 /// <reference path="../net.d.ts" />
 /// <reference path="../perf_hooks.d.ts" />
+/// <reference path="../legacy/process.d.ts" />
 /// <reference path="../process.d.ts" />
 /// <reference path="../querystring.d.ts" />
 /// <reference path="../readline.d.ts" />

@@ -1,4 +1,5 @@
 declare module "node:dgram" {
+    import { type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import * as dns from "node:dns";
     import { Abortable, EventEmitter, InternalEventEmitter } from "node:events";

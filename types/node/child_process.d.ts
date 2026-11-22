@@ -1,10 +1,15 @@
+/// <reference path="./dgram.d.ts" />
+/// <reference path="./net.d.ts" />
 declare module "node:child_process" {
+    import type { AbortSignal, Buffer, BufferEncoding } from "node/select/buffer-bindings.js";
+    import { Symbol } from "node/select/zlib-bindings.js";
+    import type { Scope as NodeJS } from "node/select/process-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import * as dgram from "node:dgram";
     import { Abortable, EventEmitter, InternalEventEmitter } from "node:events";
     import * as net from "node:net";
     import { Readable, Stream, Writable } from "node:stream";
-    import { URL } from "node:url";
+    import type { URL } from "node/select/fs-bindings.js";
     type Serializable = string | object | number | boolean | bigint;
     type SendHandle = net.Socket | net.Server | dgram.Socket | undefined;
     interface ChildProcessEventMap {

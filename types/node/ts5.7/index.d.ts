@@ -87,6 +87,7 @@
 /// <reference path="../path/posix.d.ts" />
 /// <reference path="../path/win32.d.ts" />
 /// <reference path="../perf_hooks.d.ts" />
+/// <reference path="../legacy/process.d.ts" />
 /// <reference path="../process.d.ts" />
 /// <reference path="../punycode.d.ts" />
 /// <reference path="../querystring.d.ts" />

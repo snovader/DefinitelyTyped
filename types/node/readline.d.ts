@@ -1,4 +1,7 @@
+/// <reference path="./readline/promises.d.ts" />
 declare module "node:readline" {
+    import type { AbortSignal, Buffer } from "node/select/buffer-bindings.js";
+    import { type Disposable, type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
     import { Abortable, EventEmitter, InternalEventEmitter } from "node:events";
     interface Key {
         sequence?: string | undefined;

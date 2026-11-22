@@ -1,4 +1,9 @@
+/// <reference path="../fs.d.ts" />
+/// <reference path="../readline.d.ts" />
 declare module "node:fs/promises" {
+    import type { Buffer, BufferEncoding } from "node/select/buffer-bindings.js";
+    import { type AsyncDisposable, type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
+    import type { GlobalURL as URL } from "node/select/fs-bindings.js";
     import { BufferView, NonSharedBuffer } from "node:buffer";
     import { Abortable } from "node:events";
     import { Interface as ReadlineInterface } from "node:readline";

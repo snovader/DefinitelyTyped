@@ -1,0 +1,12 @@
+import proc, { cwd, env, type ProcessEventMap } from "node:process";
+import bare from "process";
+export const environment = env;
+export const alias: typeof proc = bare;
+export const runtime = proc;
+export const beforeExit = (code: ProcessEventMap["beforeExit"][0]) => code;
+export const exit = (code: proc.ProcessEventMap["exit"][0]) => code;
+export const path = cwd();
+export const memory = proc.memoryUsage();
+export const file = proc.getBuiltinModule("node:fs").readFileSync("file");
+export const workerCPU = (worker: ProcessEventMap["worker"][0]) => worker.cpuUsage();
+export const moduleOfProcess = proc.mainModule;

@@ -1,9 +1,14 @@
+/// <reference path="./buffer.d.ts" />
+/// <reference path="./stream.d.ts" />
+/// <reference path="./fs/promises.d.ts" />
 declare module "node:fs" {
+    import type { AbortSignal, Buffer, BufferEncoding } from "node/select/buffer-bindings.js";
+    import { type Disposable, type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
+    import type { Blob, URL } from "node/select/fs-bindings.js";
     import { BufferView, NonSharedBuffer } from "node:buffer";
     import { Abortable, EventEmitter, InternalEventEmitter } from "node:events";
     import { FileHandle } from "node:fs/promises";
     import * as stream from "node:stream";
-    import { URL } from "node:url";
     /**
      * Valid types for path values in "fs".
      */

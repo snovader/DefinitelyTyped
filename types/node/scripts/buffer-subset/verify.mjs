@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { checkFsProcess, publicValueMembers } from "./fs-process.mjs";
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -12,6 +13,7 @@ const nodeDir = resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const { values } = parseArgs({ options: {
     baseline: { type: "string", default: "9b0ad8df8337133ee935159e5edf8947b1064085" },
+    "fs-process-only": { type: "boolean" },
     "globals-only": { type: "boolean" },
     "zlib-only": { type: "boolean" },
     "overloads-only": { type: "boolean" },
@@ -47,7 +49,7 @@ function stage() {
 }
 
 // Check the complete global and module name sets with the locally installed compiler API.
-function surface(ts, dir, types, lib) {
+function surface(ts, dir, types, lib, inspectValues = false) {
     const entry = join(dir, "surface.ts");
     writeFileSync(entry, "export {};\n");
     const program = ts.createProgram([entry], {
@@ -58,7 +60,11 @@ function surface(ts, dir, types, lib) {
     const flags = ts.SymbolFlags;
     const globals = checker.getSymbolsInScope(program.getSourceFile(entry), flags.Type | flags.Value | flags.Namespace)
         .map(symbol => symbol.name).filter(name => !name.startsWith('"')).sort();
+    const values = new Map();
     const modules = new Map(checker.getAmbientModules().map(module => {
+        if (inspectValues && ['"node:fs"', '"node:process"'].includes(module.name)) {
+            values.set(module.name, publicValueMembers(ts, checker, module));
+        }
         const members = checker.getExportsOfModule(module).map(symbol => {
             const target = symbol.flags & flags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
             return [symbol.name, Boolean(target.flags & flags.Type), Boolean(target.flags & flags.Value)];
@@ -67,7 +73,7 @@ function surface(ts, dir, types, lib) {
     }));
     const nodeNamespace = checker.resolveName("NodeJS", program.getSourceFile(entry), flags.Namespace, false);
     const nodeNames = nodeNamespace ? checker.getExportsOfModule(nodeNamespace).map(member => member.name).sort() : [];
-    return { globals, modules, nodeNames };
+    return { globals, modules, nodeNames, values };
 }
 
 function checkSelectorSurface(ts, lib) {
@@ -178,9 +184,9 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", 
     return { files: filesRead, diagnostics, declaration: existsSync(emitted) ? readFileSync(emitted, "utf8") : undefined };
 }
 
-function checkZlibIdentity(ts, types) {
+function checkBufferIdentity(ts, types, fixture) {
     const dir = targets[1];
-    const entry = join(dir, "fixtures/zlib-api.ts");
+    const entry = join(dir, "fixtures", fixture + ".ts");
     const program = ts.createProgram([entry], {
         module: ts.ModuleKind.NodeNext, target: ts.ScriptTarget.ESNext, strict: true, types,
         typeRoots: [join(dir, "node_modules/@types")], lib: ["lib.esnext.d.ts"],
@@ -191,7 +197,7 @@ function checkZlibIdentity(ts, types) {
     const symbolOf = name => checker.getTypeAtLocation(bindings.find(binding => binding.name.text === name).name).getSymbol();
     const result = symbolOf("bytes");
     assert.equal(result?.name, "Buffer");
-    assert.equal(result, symbolOf("sameBuffer"), "gzipSync and the imported Buffer must resolve to the same symbol");
+    assert.equal(result, symbolOf("sameBuffer"), fixture + " and the imported Buffer must resolve to the same symbol");
     assert.ok(result.declarations.some(node => node.getSourceFile().fileName.endsWith("/select/buffer-core.d.ts")));
 }
 
@@ -357,7 +363,7 @@ function checkSelectors() {
         const ts = require(api);
         assert.equal("Version " + ts.version, version);
         for (const types of [["node/zlib"], ["node/zlib", "node/buffer"], ["node/buffer", "node/zlib"]]) {
-            checkZlibIdentity(ts, types);
+            checkBufferIdentity(ts, types, "zlib-api");
         }
         for (const libs of [["es2020"], ["esnext"], ["esnext", "dom"], ["esnext", "webworker"]]) {
             checkSelectorSurface(ts, libs);
@@ -408,10 +414,27 @@ function checkSelectors() {
 
 try {
     stage();
-    if (values["globals-only"] || (!values["zlib-only"] && !values["overloads-only"])) checkGlobals();
+    const all = !["fs-process-only", "globals-only", "zlib-only", "overloads-only"].some(key => values[key]);
+    if (all || values["fs-process-only"]) {
+        for (const selector of ["fs", "process"]) {
+            const stock = compile(targets[1], ["node/" + selector], "", "nodenext", false, false, "ESNext",
+                { files: [selector + "-api", "fs-process-isolation"] });
+            assert.equal(stock.diagnostics, "", selector + " with stock Undici");
+            assert.ok(!stock.files.some(file => file.includes("/undici-types/")));
+        }
+    }
+    if (all || values["globals-only"]) checkGlobals();
     else applyUndiciPatch(targets[1]);
-    if (!values["globals-only"] && !values["overloads-only"]) checkSelectors();
-    if (!values["globals-only"] && !values["zlib-only"]) checkOverloadOrder();
+    if (all || values["fs-process-only"]) {
+        const api = resolve(dirname(realpathSync(compiler)), "../lib/typescript.js");
+        const ts = existsSync(api) ? require(api) : undefined;
+        if (ts) {
+            for (const name of ["node/fs", "node/process"]) checkBufferIdentity(ts, [name], "fs-api");
+        }
+        checkFsProcess({ baseline: targets[0], candidate: targets[1], compile, surface, ts, nodeFiles, version });
+    }
+    if (all || values["zlib-only"]) checkSelectors();
+    if (all || values["overloads-only"]) checkOverloadOrder();
 } finally {
     rmSync(tmp, { recursive: true, force: true });
 }

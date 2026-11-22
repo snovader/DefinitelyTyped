@@ -165,3 +165,87 @@ await emit("select/zlib-nodejs.d.ts", 'export type { ArrayBufferView } from "nod
     + 'export type { ReadableStream, ReadWriteStream, WritableStream } from "./stream-types.js";\n\n'
     + localNodeInterface("Iterator<").replaceAll("NodeJS.Iterator", "Iterator") + "\n\n"
     + localNodeInterface("ErrnoException "));
+
+// Project only the referenced instance types when importing a whole public module
+// would also register unrelated built-ins or install globals (URL, Module and Undici).
+function declarations(text, name, parents, names) {
+    const file = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+    let statements = file.statements;
+    for (const parent of parents) {
+        statements = statements.filter(node => ts.isModuleDeclaration(node) && node.name.text === parent
+            && node.body && ts.isModuleBlock(node.body)).flatMap(node => [...node.body.statements]);
+        if (!statements.length) throw new Error("Missing namespace " + parent + " in " + name);
+    }
+    return names.map(name => {
+        const matches = statements.filter(node => (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))
+            && node.name.text === name);
+        if (matches.length !== 1) throw new Error("Expected one declaration of " + name + " in " + file.fileName);
+        const [decl] = matches;
+        const column = file.getLineAndCharacterOfPosition(decl.getStart(file)).character;
+        return "export " + unindent(decl.getText(file), column);
+    }).join("\n\n");
+}
+const urlTypes = declarations(await source("url.d.ts"), "url.d.ts", ["node:url"], ["URL", "URLSearchParams", "URLSearchParamsIterator"]);
+await emit("select/url-types.d.ts", 'import type * as NodeJS from "./zlib-nodejs.js";\n\n' + urlTypes);
+const moduleTypes = await source("module.d.ts");
+await emit("select/process-support.d.ts",
+    declarations(nodeGlobals, "legacy/globals.d.ts", ["NodeJS"], ["Dict", "RefCounted"])
+    + "\n\n" + declarations(moduleTypes, "module.d.ts", ["node:module", "global", "NodeJS"], ["Module"]));
+const undiciFile = new URL(import.meta.resolve("undici-types/websocket.d.ts"));
+const undiciWebSocket = await readFile(undiciFile, "utf8");
+const undiciLicense = await readFile(new URL("./LICENSE", undiciFile), "utf8");
+await emit("select/process-web.d.ts", 'import type { Event } from "node/select/zlib-bindings.js";\n'
+    + 'import type { MessagePort } from "node:worker_threads";\nimport type * as NodeJS from "./process-support.js";\n\n'
+    + declarations(moduleTypes, "module.d.ts", ["node:module", "Module"], ["ImportAttributes", "ImportPhase"]) + "\n\n"
+    + "/* MessageEvent from undici-types/websocket.d.ts\n" + undiciLicense.trimEnd() + "\n*/\n"
+    + declarations(undiciWebSocket, "undici-types/websocket.d.ts", [], ["MessageEvent"]));
+
+// Follow registration references so the process lookup only names built-ins available in this selection.
+async function registeredModules(entry) {
+    const seen = new Set();
+    const modules = new Set();
+    async function visit(path) {
+        if (seen.has(path)) return;
+        seen.add(path);
+        const file = ts.createSourceFile(path, await source(path), ts.ScriptTarget.Latest, true);
+        for (const declaration of file.statements) {
+            if (ts.isModuleDeclaration(declaration) && ts.isStringLiteral(declaration.name)
+                && declaration.name.text.startsWith("node:")) modules.add(declaration.name.text.slice(5));
+        }
+        for (const ref of file.referencedFiles) await visit(join(dirname(path), ref.fileName));
+    }
+    await visit(entry);
+    return modules;
+}
+const processModules = await registeredModules("process.d.ts");
+const processSource = await source("legacy/process.d.ts");
+const processHelpers = unindent(between(processSource, 'declare module "node:process" {\n', '    global {'), 4)
+    .replaceAll("../select/optional-builtins.js", "./optional-builtins.js")
+    .replace(/^    "(?:node:)?([^"]+)": typeof import\([^\n]+\n/gm, (line, module) => processModules.has(module) ? line : "")
+    .replaceAll("NodeJS.Signals", "Signals").replaceAll("NodeJS.UncaughtExceptionOrigin", "UncaughtExceptionOrigin")
+    .replace("interface ProcessEventMap ", "export interface ProcessEventMap ");
+const processMembers = unindent(between(processSource, "        namespace NodeJS {\n", "\n        }\n    }"), 12)
+    .replace(/^(interface|type) /gm, "export $1 ");
+await emit("select/process-types.d.ts", 'import type { Dict, Module } from "./process-support.js";\n'
+    + 'import type { EventEmitter, ReadWriteStream } from "./zlib-nodejs.js";\n'
+    + processHelpers + "\n" + processMembers);
+
+// Libraries compiled without globals can name these ordinary modules in their declarations.
+// Rebind those names when the consuming program opts into the global environment.
+function emittedModule(name, exports) {
+    return 'declare module "node/select/' + name + '.js" {\n' + indent(exports, 4)
+        + '\n}\ndeclare module "node/select/' + name + '" {\n    export * from "node/select/' + name + '.js";\n}';
+}
+function nodeAliases(names) {
+    return names.map(name => "export import " + name + " = NodeJS." + name + ";").join("\n");
+}
+const processNames = [...processMembers.matchAll(/^export (?:interface|type) (\w+)/gm)].map(match => match[1]);
+await emit("select/global-emitted-types.d.ts", [
+    emittedModule("process-types", nodeAliases(processNames) + '\nexport type { ProcessEventMap } from "node:process";'),
+    emittedModule("process-support", nodeAliases(["Dict", "Module", "RefCounted"])),
+    emittedModule("zlib-nodejs", nodeAliases(["ArrayBufferView", "AsyncIterator", "ErrnoException", "EventEmitter",
+        "Iterator", "ReadableStream", "ReadWriteStream", "WritableStream"])),
+    emittedModule("url-types", 'export type { URL, URLSearchParams, URLSearchParamsIterator } from "node:url";'),
+    emittedModule("process-web", 'export type { ImportAttributes, ImportPhase } from "node:module";\n'
+        + 'export type { MessageEvent } from "node/select/undici.js";'),
+].join("\n"));

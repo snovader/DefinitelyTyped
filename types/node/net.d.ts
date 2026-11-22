@@ -1,4 +1,7 @@
+/// <reference path="./dns.d.ts" />
 declare module "node:net" {
+    import type { AbortSignal, BufferEncoding } from "node/select/buffer-bindings.js";
+    import { type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import * as dns from "node:dns";
     import { Abortable, EventEmitter, InternalEventEmitter } from "node:events";

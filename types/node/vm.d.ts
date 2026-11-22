@@ -1,6 +1,6 @@
 declare module "node:vm" {
+    import type { ImportAttributes, ImportPhase, Scope as NodeJS } from "node/select/process-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
-    import { ImportAttributes, ImportPhase } from "node:module";
     interface Context extends NodeJS.Dict<any> {}
     interface BaseOptions {
         /**

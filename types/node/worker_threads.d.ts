@@ -1,4 +1,11 @@
+/// <reference path="./perf_hooks.d.ts" />
+/// <reference path="./v8.d.ts" />
+/// <reference path="./vm.d.ts" />
 declare module "node:worker_threads" {
+    import type { AbortSignal } from "node/select/buffer-bindings.js";
+    import { type Event, type EventListenerOptions, type EventTarget, Symbol } from "node/select/zlib-bindings.js";
+    import * as Bindings from "node/select/process-bindings.js";
+    import type { AddEventListenerOptions, EventListener, EventListenerObject, MessageEvent, Scope as NodeJS } from "node/select/process-bindings.js";
     import {
         EventEmitter,
         InternalEventEmitter,
@@ -10,10 +17,9 @@ declare module "node:worker_threads" {
     import { Performance } from "node:perf_hooks";
     import { Readable, Writable } from "node:stream";
     import { ReadableStream, TransformStream, WritableStream } from "node:stream/web";
-    import { URL } from "node:url";
+    import type { URL } from "node/select/fs-bindings.js";
     import { CPUProfileHandle, CPUProfileOptions, HeapInfo, HeapProfileHandle, HeapProfileOptions } from "node:v8";
     import { Context } from "node:vm";
-    import { MessageEvent } from "node/select/undici.js";
     const isInternalThread: boolean;
     const isMainThread: boolean;
     const parentPort: null | MessagePort;
@@ -664,7 +670,7 @@ declare module "node:worker_threads" {
         new(): MessagePort;
     };
     var locks: LockManager;
-    export import structuredClone = globalThis.structuredClone;
+    export import structuredClone = Bindings.structuredClone;
     // #endregion
 }
 declare module "worker_threads" {

@@ -1,4 +1,6 @@
 declare module "node:perf_hooks" {
+    import type { AddEventListenerOptions, EventListener, EventListenerObject } from "node/select/process-bindings.js";
+    import { type Event, type EventListenerOptions, type EventTarget, Symbol } from "node/select/zlib-bindings.js";
     import { InternalEventTargetEventProperties } from "node:events";
     // #region web types
     type EntryType =

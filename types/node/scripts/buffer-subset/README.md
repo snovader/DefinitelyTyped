@@ -21,10 +21,10 @@ With the companion patch to `undici-types@8.9.0`, `"types": ["node/globals"]` lo
 | `node/buffer` | 12 | 0 |
 | `node/zlib` | 25 | 0 |
 | `node/fs` | 28 | 0 |
-| `node/process` (also with `node/fs`) | 46 | 0 |
-| `node/globals` | 91 | 13 |
-| `node/globals` and `node/zlib` | 93 | 13 |
-| `node` | 125 | 44 |
+| `node/process` (also with `node/fs`) | 49 | 0 |
+| `node/globals` | 92 | 13 |
+| `node/globals` and `node/zlib` | 94 | 13 |
+| `node` | 126 | 44 |
 
 Counts are from a NodeNext CommonJS consumer with ESNext libraries, default type roots and the patched dependency. They exclude the compiler libraries and the consumer. The preceding globals prototype loaded 113 Node declarations for full Node. The additional files here provide module-local declarations and reconnect their names to the global interfaces when selected.
 
@@ -49,7 +49,9 @@ With `"types": ["node/fs"]`, import `readFileSync` from `node:fs` and `open` fro
 
 With `"types": ["node/process"]`, import `process` or individual properties such as `env` from `node:process`. The selector registers 22 built-ins. Its dependency graph already includes the whole fs selection. The worker event in `ProcessEventMap` brings in worker threads, which use Undici's MessageEvent shape. The generator extracts that interface along with its license so worker types can reference it without opting into Fetch globals. The built-in lookup keys are derived from the modules registered by the selector. Adding `node/zlib` also registers both zlib spellings.
 
-The public fs signatures have one implementation across all selectors. For process, the original open declarations live in `legacy/process.d.ts`. The generator derives a second, module-local copy of the process interfaces for isolated consumers. Both copies are present in the full Node file graph. Editing and regenerating one source preserves the original declaration groups for user augmentations and overload ordering.
+The public fs signatures have one implementation across all selectors. For process, both selectors use the same public module registration and the same 44 property definitions in `select/process-properties.d.ts`. Each property keeps its type, documentation and modifiers there. Its indexed reference on the public interface lets TypeScript reject incompatible property redeclarations and preserves member order. The environment determines whether names such as `ProcessEnv` refer to the open global interfaces or the standalone module.
+
+The 58 method signatures still need two declaration sites. Full Node installs them directly on `NodeJS.Process` in `legacy/process.d.ts`, where they merge with application overloads in source order. The generator uses those same signatures for the isolated interface in `select/process-types.d.ts`. Selecting `node` or `node/globals` loads only the global method group. Selecting `node/process` loads only the standalone group. Explicitly selecting both, or importing an isolated library declaration that names `node/select/process-types` in a full Node project, loads both groups and uses the global API. The properties are shared in every configuration.
 
 A library built with `node/process` can emit a reference to `node/select/process-types` for an inferred `process.env`. When its consumer selects globals, that name resolves to the consumer's open `NodeJS.ProcessEnv`. The verifier checks this across separate compilations, including an application that adds an environment key. It also checks that an exported `process` regains the full built-in registry and that fs callback errors see `NodeJS.ErrnoException` augmentations.
 
@@ -67,7 +69,7 @@ compressor.end("payload");
 
 The real `zlib.d.ts` uses the existing Buffer selector and `Transform` from `node:stream`. Stream brings in events, async hooks, stream iterators, stream promises and Web Streams. These eight built-ins are available under both their bare and `node:` names. The file graph excludes HTTP, filesystem declarations, `stream/consumers`, `zlib/iter`, the full Node entry point and `undici-types`.
 
-On TypeScript 6.0.3, zlib loads 25 Node declaration files, including all 12 loaded by Buffer. Adding Buffer explicitly in either order produces the same file set. Full Node loads all 25 among its 125 files. The complete programs are compared as well, so extra compiler libraries or external packages would fail the test.
+On TypeScript 6.0.3, zlib loads 25 Node declaration files, including all 12 loaded by Buffer. Adding Buffer explicitly in either order produces the same file set. Full Node loads all 25 among its 126 files. The complete programs are compared as well, so extra compiler libraries or external packages would fail the test.
 
 The stream and events declarations import their environment types through `select/zlib-bindings.d.ts`. The subset uses module-local event, stream and iterator interfaces. ES2020 projects get local disposal-symbol types. With full Node, the bindings resolve to the original global types. The generated `legacy/events-globals.d.ts` and `legacy/stream-globals.d.ts` put the methods back on the open `NodeJS` interfaces, where consumer overloads can merge with them. The stream dependency and the standalone `node/async_hooks` entry share the same async-hooks declarations. Each supplies the appropriate disposal interface for `RunScope`; direct async-hooks selection therefore still honors a consumer's global `Disposable` augmentation without loading streams. Older compiler routes include forwarding files for types named in a library's emitted declarations.
 
@@ -94,7 +96,9 @@ node scripts/buffer-subset/verify.mjs
 
 Run the generator without `--check` after changing the shared declarations. The verifier stages the candidate and upstream commit `9b0ad8df8337133ee935159e5edf8947b1064085` as separate installations. Pass `--tsc /absolute/path/to/tsc` to test a different compiler.
 
-The overload fixtures compare the complete consumer declaration byte for byte. They cover Buffer instance methods, static factories, construction, extracted method references and an overlapping `NodeJS.EventEmitter` overload. Five source orders exercise nine full/global selector combinations.
+The process fixtures compare byte-for-byte declaration emit for all 82 individually extractable Process members, compare the private built-in registry diagnostic separately, and vary the source order of competing global overloads. They also compile isolated output in a new project with an empty `types` selection.
+
+The Buffer overload fixtures compare the complete consumer declaration byte for byte. They cover Buffer instance methods, static factories, construction, extracted method references and an overlapping `NodeJS.EventEmitter` overload. Five source orders exercise nine full/global selector combinations.
 
 The selector suite uses ES, DOM and Web Worker libraries, NodeNext and Bundler resolution, and implicit and explicit type roots. It checks compression and streaming calls, typed event emission, sync and async disposal, and the absence of Node globals. A downstream consumer compiles the emitted zlib declarations, including inferred iterator, stream and abort-signal types. NodeNext is exercised with CommonJS and ESM packages.
 

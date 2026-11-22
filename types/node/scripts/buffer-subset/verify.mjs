@@ -153,7 +153,7 @@ function compile(dir, types, host, mode, roots, subset = false, lib = "ESNext", 
         : ["legacy"]);
     const options = {
         target: "ESNext", module: mode === "bundler" ? "ESNext" : "NodeNext", moduleResolution: mode === "nodenext-esm" ? "nodenext" : mode,
-        lib: [lib, ...(host ? [host] : [])], strict: true, skipLibCheck: false, types, declaration: true,
+        lib: [lib, ...(host ? [host] : [])], strict: true, exactOptionalPropertyTypes: comparison?.exactOptionalPropertyTypes, skipLibCheck: false, types, declaration: true,
         emitDeclarationOnly: true, rootDir: "./fixtures", outDir: "./out", ...(roots ? { typeRoots: ["./node_modules/@types"] } : {}),
     };
     // Both package consumers and their declaration dependencies are local to this staging directory.

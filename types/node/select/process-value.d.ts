@@ -1,7 +1,7 @@
-import type { Process } from "./process-types.js";
+import type { Process } from "node/select/process-context.js";
 
 declare var process: Process;
 declare namespace process {
-    type ProcessEventMap = import("./process-types.js").ProcessEventMap;
+    type ProcessEventMap = import("node/select/process-context.js").ProcessEventMap;
 }
 export = process;

@@ -188,9 +188,6 @@ function declarations(text, name, parents, names) {
 const urlTypes = declarations(await source("url.d.ts"), "url.d.ts", ["node:url"], ["URL", "URLSearchParams", "URLSearchParamsIterator"]);
 await emit("select/url-types.d.ts", 'import type * as NodeJS from "./zlib-nodejs.js";\n\n' + urlTypes);
 const moduleTypes = await source("module.d.ts");
-await emit("select/process-support.d.ts",
-    declarations(nodeGlobals, "legacy/globals.d.ts", ["NodeJS"], ["Dict", "RefCounted"])
-    + "\n\n" + declarations(moduleTypes, "module.d.ts", ["node:module", "global", "NodeJS"], ["Module"]));
 const undiciFile = new URL(import.meta.resolve("undici-types/websocket.d.ts"));
 const undiciWebSocket = await readFile(undiciFile, "utf8");
 const undiciLicense = await readFile(new URL("./LICENSE", undiciFile), "utf8");
@@ -217,18 +214,37 @@ async function registeredModules(entry) {
     await visit(entry);
     return modules;
 }
-const processModules = await registeredModules("process.d.ts");
+const processModules = await registeredModules("select/process-register.d.ts");
 const processSource = await source("legacy/process.d.ts");
 const processHelpers = unindent(between(processSource, 'declare module "node:process" {\n', '    global {'), 4)
     .replaceAll("../select/optional-builtins.js", "./optional-builtins.js")
     .replace(/^    "(?:node:)?([^"]+)": typeof import\([^\n]+\n/gm, (line, module) => processModules.has(module) ? line : "")
     .replaceAll("NodeJS.Signals", "Signals").replaceAll("NodeJS.UncaughtExceptionOrigin", "UncaughtExceptionOrigin")
     .replace("interface ProcessEventMap ", "export interface ProcessEventMap ");
-const processMembers = unindent(between(processSource, "        namespace NodeJS {\n", "\n        }\n    }"), 12)
-    .replace(/^(interface|type) /gm, "export $1 ");
-await emit("select/process-types.d.ts", 'import type { Dict, Module } from "./process-support.js";\n'
+const processMembers = unindent(between(processSource, "        namespace NodeJS {\n", "\n        }\n    }"), 12);
+// Loading the standalone module supplies the fallback types used by the shared properties,
+// child processes and workers. Full Node supplies the same names through its global bindings.
+const contextNames = ["Architecture", "CpuUsage", "HRTime", "MemoryUsageFn", "Platform", "Process",
+    "ProcessConfig", "ProcessEnv", "ProcessEventMap", "ProcessFeatures", "ProcessPermission", "ProcessRelease",
+    "ProcessReport", "ProcessVersions", "ReadStream", "Signals", "WriteStream"];
+const context = contextNames.map(name => name + ": " + name + ";").join("\n");
+// Workers and child processes also consume these three types without selecting process.
+const fallbackNames = ["CpuUsage", "ProcessEnv", "Signals"];
+const fallback = declarations(processMembers.replace(/^export (?=interface|type)/gm, ""), "process-types.d.ts", [], fallbackNames);
+await emit("select/process-support.d.ts",
+    declarations(nodeGlobals, "legacy/globals.d.ts", ["NodeJS"], ["Dict", "RefCounted"])
+    + "\n\n" + declarations(moduleTypes, "module.d.ts", ["node:module", "global", "NodeJS"], ["Module"]) + "\n\n" + fallback);
+await emit("select/process-context.d.ts", 'import type * as Fallback from "./process-support.js";\n\n'
+    + "export interface LocalProcessTypes {}\n"
+    + "type Lookup<K, Default = never> = K extends keyof LocalProcessTypes ? LocalProcessTypes[K] : Default;\n"
+    + contextNames.map(name => 'export type ' + name + ' = Lookup<"' + name + '"'
+        + (fallbackNames.includes(name) ? ", Fallback." + name : "") + ">;").join("\n"));
+await emit("select/process-types.d.ts", '/// <reference path="./process-register.d.ts" />\n'
+    + 'import type { Dict } from "./process-support.js";\n'
     + 'import type { EventEmitter, ReadWriteStream } from "./zlib-nodejs.js";\n'
-    + processHelpers + "\n" + processMembers);
+    + processHelpers + "\n" + processMembers
+    + "\n\ninterface StandaloneProcessTypes {\n" + indent(context, 4)
+    + '\n}\ndeclare module "./process-context.js" {\n    interface LocalProcessTypes extends StandaloneProcessTypes {}\n}');
 
 // Libraries compiled without globals can name these ordinary modules in their declarations.
 // Rebind those names when the consuming program opts into the global environment.
@@ -241,8 +257,10 @@ function nodeAliases(names) {
 }
 const processNames = [...processMembers.matchAll(/^export (?:interface|type) (\w+)/gm)].map(match => match[1]);
 await emit("select/global-emitted-types.d.ts", [
+    emittedModule("process-context", nodeAliases(contextNames.filter(name => name !== "ProcessEventMap"))
+        + '\nexport type { ProcessEventMap } from "node:process";'),
     emittedModule("process-types", nodeAliases(processNames) + '\nexport type { ProcessEventMap } from "node:process";'),
-    emittedModule("process-support", nodeAliases(["Dict", "Module", "RefCounted"])),
+    emittedModule("process-support", nodeAliases(["Dict", "Module", "RefCounted", ...fallbackNames])),
     emittedModule("zlib-nodejs", nodeAliases(["ArrayBufferView", "AsyncIterator", "ErrnoException", "EventEmitter",
         "Iterator", "ReadableStream", "ReadWriteStream", "WritableStream"])),
     emittedModule("url-types", 'export type { URL, URLSearchParams, URLSearchParamsIterator } from "node:url";'),

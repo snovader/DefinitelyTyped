@@ -1,5 +1,5 @@
 declare module "node:zlib" {
-    import { NonSharedBuffer } from "node:buffer";
+    import type { Buffer, NonSharedBuffer } from "node:buffer";
     import * as stream from "node:stream";
     interface ZlibOptions {
         /**

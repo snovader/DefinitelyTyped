@@ -88,3 +88,21 @@ import { promisify } from "node:util";
 
     queueMicrotask(() => {});
 }
+
+// Global handle augmentations and overloads are visible through both timer entry points.
+declare const timerBrand: unique symbol;
+declare global {
+    namespace NodeJS {
+        interface Timeout {
+            readonly [timerBrand]: true;
+        }
+    }
+    function setTimeout(callback: () => void, delay: 12345): NodeJS.Timeout & { delay: 12345 };
+}
+
+{
+    setTimeout(() => {}, 100)[timerBrand] satisfies true;
+    timers.setTimeout(() => {}, 100)[timerBrand] satisfies true;
+    setTimeout(() => {}, 12345).delay satisfies 12345;
+    timers.setTimeout(() => {}, 12345).delay satisfies 12345;
+}

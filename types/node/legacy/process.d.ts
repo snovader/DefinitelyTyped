@@ -1,5 +1,4 @@
-/// <reference path="../select/global-fs-bindings.d.ts" />
-/// <reference path="../select/global-process-bindings.d.ts" />
+/// <reference path="../select/global-module-bindings.d.ts" />
 declare module "node:process" {
     import { Control, MessageOptions, SendHandle } from "node:child_process";
     import { PathLike } from "node:fs";

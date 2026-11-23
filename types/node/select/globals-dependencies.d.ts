@@ -27,9 +27,9 @@
 /// <reference path="../events.d.ts" />
 /// <reference path="../fs.d.ts" />
 /// <reference path="../fs/promises.d.ts" />
-/// <reference path="../http.d.ts" />
+/// <reference path="../internal/http.d.ts" />
 /// <reference path="../legacy/module-globals.d.ts" />
-/// <reference path="../module.d.ts" />
+/// <reference path="../internal/module.d.ts" />
 /// <reference path="../net.d.ts" />
 /// <reference path="../perf_hooks.d.ts" />
 /// <reference path="../legacy/process.d.ts" />
@@ -43,14 +43,18 @@
 /// <reference path="../stream/promises.d.ts" />
 /// <reference path="../stream/web.d.ts" />
 /// <reference path="../legacy/timers-globals.d.ts" />
-/// <reference path="../timers.d.ts" />
-/// <reference path="../timers/promises.d.ts" />
+/// <reference path="../internal/timers.d.ts" />
+/// <reference path="../internal/timers/promises.d.ts" />
 /// <reference path="../tls.d.ts" />
 /// <reference path="../tty.d.ts" />
-/// <reference path="../url.d.ts" />
+/// <reference path="../internal/url.d.ts" />
 /// <reference path="../util.d.ts" />
 /// <reference path="../util/types.d.ts" />
 /// <reference path="../v8.d.ts" />
 /// <reference path="../vm.d.ts" />
 /// <reference path="../worker_threads.d.ts" />
-/// <reference path="../select/global-zlib-bindings.d.ts" />
+
+// Full Node binds this exact name to stock Undici. The wildcard supplies the isolated fallback.
+declare module "node/select/*/undici" {
+    export * from "node/select/undici.js";
+}

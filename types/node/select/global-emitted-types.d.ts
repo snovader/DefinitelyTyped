@@ -128,7 +128,7 @@ declare module "node/select/url-types" {
 }
 declare module "node/select/process-web.js" {
     export type { ImportAttributes, ImportPhase } from "node:module";
-    export type { MessageEvent } from "node/select/undici.js";
+    export type { MessageEvent } from "node/select/env/undici";
 }
 declare module "node/select/process-web" {
     export * from "node/select/process-web.js";

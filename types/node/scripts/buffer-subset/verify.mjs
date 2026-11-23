@@ -283,6 +283,7 @@ function checkGlobals() {
         ["WebWorker", "nodenext-esm", false], ["", "nodenext-esm", false]]) {
         const upstream = test(baseline, ["node"], fixture, host, mode, roots);
         for (const types of [["node/globals"], ["node/buffer", "node/globals"], ["node/globals", "node/buffer"],
+            ["node/http", "node/globals"], ["node/globals", "node/http"],
             ["node"], ["node/globals", "node"], ["node", "node/globals"]]) {
             const result = test(candidate, types, fixture, host, mode, roots);
             const context = types.join("+") + " " + (host || "ES") + " " + mode;
@@ -305,7 +306,13 @@ function checkGlobals() {
             if (!types.includes("node")) {
                 assert.deepEqual(packages(result), expectedUndici);
                 for (const file of ["zlib", "http2", "inspector", "test", "sqlite", "path", "assert", "wasi"]) {
-                    assert.ok(!files.includes(file + ".d.ts"), context + " loaded " + file);
+                    assert.ok(!files.includes(file + ".d.ts") && !files.includes("internal/" + file + ".d.ts"),
+                        context + " loaded " + file);
+                }
+            }
+            if (types.length === 1 && types[0] === "node") {
+                for (const file of ["http-websocket", "http-dispatcher", "fetch", "timer-functions"]) {
+                    assert.ok(!files.includes("select/" + file + ".d.ts"), context + " loaded standalone " + file);
                 }
             }
             if (!host && mode === "nodenext" && types.length === 1) {

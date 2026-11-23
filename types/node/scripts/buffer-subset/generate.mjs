@@ -95,20 +95,17 @@ function globalInterface(iface, file, common) {
     }
     const params = iface.typeParameters?.map(param => param.getText(file));
     const header = "    interface " + name + (params ? "<" + params.join(", ") + ">" : "");
+    // Only the version-specific group needs the shared base. Copy the common
+    // JSDoc when generating globals to avoid instantiating a second, mapped base.
     let heritage = "";
-    if (isInstance && common) {
-        // Only inherit documentation for names with a single signature. An
-        // overloaded method can document each signature independently.
-        const keys = [...counts].filter(([, count]) => count === 1).map(([key]) => JSON.stringify(key));
-        heritage = " extends Pick<SharedBuffer,\n        | " + keys.join("\n        | ") + ">";
-    } else if (isInstance) {
+    if (isInstance && !common) {
         const args = iface.typeParameters?.map(param => param.name.text);
         heritage = " extends SharedBuffer" + (args ? "<" + args.join(", ") + ">" : "");
     }
     // Inheriting the shared constructor here can change the alias TypeScript
     // emits for an extracted generic Buffer.from, even with its own overloads.
     const members = iface.members.map(member => {
-        const inheritDocs = isInstance && counts.get(member.name?.getText(file)) === 1;
+        const inheritDocs = isInstance && !common && counts.get(member.name?.getText(file)) === 1;
         const signature = printer.printNode(ts.EmitHint.Unspecified, member, file);
         return [inheritDocs ? "" : jsDoc(member, file), signature].filter(Boolean).join("\n").replace(/^/gm, "        ");
     });
@@ -129,7 +126,7 @@ for (const [input, output] of [
     }
     const globals = interfaces.map(iface => globalInterface(iface, file, !augmentation)).join("\n");
     await emit("legacy/" + output + ".d.ts", 'declare module "node:buffer" {\n'
-        + '    import type { Buffer as SharedBuffer } from "node/select/buffer-core.js";\n'
+        + (augmentation ? '    import type { Buffer as SharedBuffer } from "node/select/buffer-core.js";\n' : "")
         + "    global {\n" + globals.replace(/^/gm, "    ") + "\n    }\n}");
 }
 
@@ -194,9 +191,9 @@ function declarations(text, name, parents, names) {
         return "export " + unindent(decl.getText(file), column);
     }).join("\n\n");
 }
-const urlTypes = declarations(await source("url.d.ts"), "url.d.ts", ["node:url"], ["URL", "URLSearchParams", "URLSearchParamsIterator"]);
+const urlTypes = declarations(await source("internal/url.d.ts"), "url.d.ts", ["node:url"], ["URL", "URLSearchParams", "URLSearchParamsIterator"]);
 await emit("select/url-types.d.ts", 'import type * as NodeJS from "./base-types.js";\n\n' + urlTypes);
-const moduleTypes = await source("module.d.ts");
+const moduleTypes = await source("internal/module.d.ts");
 const undiciFile = new URL(import.meta.resolve("undici-types/websocket.d.ts"));
 const undiciWebSocket = await readFile(undiciFile, "utf8");
 const undiciLicense = await readFile(new URL("./LICENSE", undiciFile), "utf8");
@@ -278,7 +275,7 @@ await emit("select/global-emitted-types.d.ts", [
         "Iterator", "ReadableStream", "ReadWriteStream", "WritableStream"])),
     emittedModule("url-types", 'export type { URL, URLSearchParams, URLSearchParamsIterator } from "node:url";'),
     emittedModule("process-web", 'export type { ImportAttributes, ImportPhase } from "node:module";\n'
-        + 'export type { MessageEvent } from "node/select/undici.js";'),
+        + 'export type { MessageEvent } from "node/select/env/undici";'),
 ].join("\n"));
 
 // Libraries can publish these names in CJS or ESM. Restore Undici's original
@@ -294,7 +291,8 @@ const undiciBindings = undiciModules.map(([local, upstream]) => {
     return [".js", ""].map(extension => 'declare module "node/select/' + local + extension + '" {\n'
         + indent(members, 4) + "\n}").join("\n");
 });
-await emit("select/full-environment.d.ts", ['declare module "node/select/undici.js" {\n    export * from "undici-types";\n}',
+await emit("select/full-environment.d.ts", ['declare module "node/select/env/undici" {\n    export * from "undici-types";\n}',
+    'declare module "node/select/undici.js" {\n    export * from "node/select/env/undici";\n}',
     ...undiciBindings].join("\n"));
 
 const moduleGlobals = await source("legacy/module-globals.d.ts");

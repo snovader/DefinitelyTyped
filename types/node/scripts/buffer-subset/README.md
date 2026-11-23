@@ -4,7 +4,9 @@ The [Node 26 package guide](../../README.md) describes the supported selectors, 
 
 ## Maintaining the declarations
 
-Edit each built-in's public declarations in its normal module file. Keep its public dependencies reachable through reference directives. Ordinary type imports under `select/` supply the module-local environment. Global entry points bind these imports to the original open interfaces and values. The compiler-version directories override declarations where TypeScript versions differ and otherwise fall through to the common files.
+Edit each built-in's public declarations in its module file. For modules with a two-reference selector, the public declarations live in the referenced file under `internal/`. Keep its public dependencies reachable through reference directives. Ordinary type imports under `select/` supply the module-local environment. Global entry points bind these imports to the original open interfaces and values. The compiler-version directories override declarations where TypeScript versions differ and otherwise fall through to the common files.
+
+Full Node and standalone selectors load the same HTTP and timer declarations from `internal/`. Standalone entry points also load wildcard ambient modules that supply their local HTTP or timer types. The shared declarations import exact names such as `node/select/env/http`. When globals are enabled, an exact ambient declaration takes precedence over the wildcard. Full Node loads the shared declarations directly, so it can use stock Undici and the global timer overloads without reading the standalone fallbacks.
 
 Buffer's public module registration, core interfaces and compiler-specific overloads are shared across selections. The generator also places the Buffer methods directly on the open global interfaces. This preserves the precedence of application overloads and the spelling of inferred declarations.
 

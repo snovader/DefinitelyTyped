@@ -1,6 +1,6 @@
 export {};
 
-import * as undici from "node/select/undici.js";
+import * as undici from "node/select/env/undici";
 
 type _CloseEvent = typeof globalThis extends { onmessage: any } ? {} : undici.CloseEvent;
 type _CloseEventInit = typeof globalThis extends { onmessage: any } ? {} : undici.CloseEventInit;

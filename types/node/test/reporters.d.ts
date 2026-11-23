@@ -1,4 +1,6 @@
+/// <reference path="../test.d.ts" />
 declare module "node:test/reporters" {
+    import type { Scope as NodeJS } from "node/select/event-bindings.js";
     import { Transform, TransformOptions } from "node:stream";
     import { EventData } from "node:test";
     type TestEvent =
@@ -57,4 +59,10 @@ declare module "node:test/reporters" {
      */
     const lcov: ReporterConstructorWrapper<typeof LcovReporter>;
     export { dot, junit, lcov, spec, tap, TestEvent };
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:test/reporters": typeof import("node:test/reporters");
+    }
 }

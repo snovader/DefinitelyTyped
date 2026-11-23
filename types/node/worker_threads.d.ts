@@ -1,9 +1,11 @@
+/// <reference path="./fs/promises.d.ts" />
+/// <reference path="./net.d.ts" />
 /// <reference path="./perf_hooks.d.ts" />
 /// <reference path="./v8.d.ts" />
 /// <reference path="./vm.d.ts" />
 declare module "node:worker_threads" {
     import type { AbortSignal } from "node/select/buffer-bindings.js";
-    import { type Event, type EventListenerOptions, type EventTarget, Symbol } from "node/select/zlib-bindings.js";
+    import { type Event, type EventListenerOptions, type EventTarget, Symbol } from "node/select/event-bindings.js";
     import * as Bindings from "node/select/process-bindings.js";
     import type { AddEventListenerOptions, EventListener, EventListenerObject, MessageEvent, Scope as NodeJS } from "node/select/process-bindings.js";
     import {

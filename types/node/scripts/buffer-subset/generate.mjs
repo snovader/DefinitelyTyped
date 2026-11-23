@@ -36,7 +36,7 @@ function unindent(text, spaces) {
 for (const legacy of [false, true]) {
     const prefix = legacy ? "ts5.6/" : "";
     const arrayBody = unindent(between(await source(prefix + "globals.typedarray.d.ts"), "    namespace NodeJS {\n", "\n    }\n}"), 8);
-    const arrayTypes = arrayBody.replace(/^type /gm, "export type ") + "\nexport type BufferSource = NonSharedArrayBufferView | ArrayBuffer;\n";
+    const arrayTypes = arrayBody.replace(/^type /gm, "export type ") + "\nexport type BufferSource = NonSharedArrayBufferView | ArrayBuffer;\nexport type AllowSharedBufferSource = ArrayBufferView | ArrayBufferLike;\nexport { type Float16Array };\n";
     // Keep Float16Array module-local when the consumer selects an older ES library.
     // The upstream 5.7 shape is also compatible with newer generic Float16Array types.
     const shim = await source((legacy ? "ts5.6" : "ts5.7") + "/compatibility/float16array.d.ts");
@@ -139,11 +139,19 @@ function indent(text, spaces) {
     return text.trimEnd().replace(/^(?=.)/gm, " ".repeat(spaces));
 }
 const emitter = await source("select/emitter.d.ts");
+const eventMap = between(emitter, "export type EventMap", "\n");
+if (!(await source("events.d.ts")).includes("type EventMap" + eventMap)) {
+    throw new Error("The local EventMap constraint must match the shared emitter");
+}
 const helpers = between(emitter, "\n\n", "\nexport interface EventEmitter<").replace(/^export type /m, "type ");
 const methods = emitter.slice(emitter.indexOf("export interface EventEmitter<")).replace("export interface", "interface")
     .replace("[captureRejectionSymbol]?", "[EventEmitter.captureRejectionSymbol]?");
-await emit("legacy/events-globals.d.ts", 'declare module "node:events" {\n'
-    + '    export {};\n    import EventEmitter = require("node:events");\n    import type { EventEmitterEventMap } from "node:events";\n'
+// An exported class name is accessible to declaration emit inside a computed method.
+// An import alias here makes inferred cluster.Worker declarations fail with TS4023.
+await emit("legacy/events-globals.d.ts", 'declare module "node/select/global-events.js" {\n'
+    + '    import type { EventEmitterEventMap } from "node:events";\n'
+    + '    class EventEmitter {\n        static readonly captureRejectionSymbol: typeof import("node:events").captureRejectionSymbol;\n    }\n'
+    + '    export = EventEmitter;\n'
     + indent(helpers, 4) + "\n    global {\n        namespace NodeJS {\n" + indent(methods, 12) + "\n        }\n    }\n}");
 const streamPath = "select/stream-types.d.ts";
 const streamFile = ts.createSourceFile(streamPath, await source(streamPath), ts.ScriptTarget.Latest, true);
@@ -163,7 +171,8 @@ await emit("select/zlib-nodejs.d.ts", 'export type { ArrayBufferView } from "nod
     + 'export type { NodeAsyncIterator as AsyncIterator } from "./stream-dependencies.js";\n'
     + 'export type { EventEmitter } from "./emitter.js";\n'
     + 'export type { ReadableStream, ReadWriteStream, WritableStream } from "./stream-types.js";\n\n'
-    + localNodeInterface("Iterator<").replaceAll("NodeJS.Iterator", "Iterator") + "\n\n"
+    + 'export type { ErrnoException, Iterator } from "./base-types.js";');
+await emit("select/base-types.d.ts", localNodeInterface("Iterator<").replaceAll("NodeJS.Iterator", "Iterator") + "\n\n"
     + localNodeInterface("ErrnoException "));
 
 // Project only the referenced instance types when importing a whole public module
@@ -186,14 +195,14 @@ function declarations(text, name, parents, names) {
     }).join("\n\n");
 }
 const urlTypes = declarations(await source("url.d.ts"), "url.d.ts", ["node:url"], ["URL", "URLSearchParams", "URLSearchParamsIterator"]);
-await emit("select/url-types.d.ts", 'import type * as NodeJS from "./zlib-nodejs.js";\n\n' + urlTypes);
+await emit("select/url-types.d.ts", 'import type * as NodeJS from "./base-types.js";\n\n' + urlTypes);
 const moduleTypes = await source("module.d.ts");
 const undiciFile = new URL(import.meta.resolve("undici-types/websocket.d.ts"));
 const undiciWebSocket = await readFile(undiciFile, "utf8");
 const undiciLicense = await readFile(new URL("./LICENSE", undiciFile), "utf8");
 await emit("select/process-web.d.ts", 'import type { Event } from "node/select/zlib-bindings.js";\n'
-    + 'import type { MessagePort } from "node:worker_threads";\nimport type * as NodeJS from "./process-support.js";\n\n'
-    + declarations(moduleTypes, "module.d.ts", ["node:module", "Module"], ["ImportAttributes", "ImportPhase"]) + "\n\n"
+    + 'import type { MessagePort } from "node:worker_threads";\n\n'
+    + 'export type { ImportAttributes, ImportPhase } from "./import-attributes.js";\n\n'
     + "/* MessageEvent from undici-types/websocket.d.ts\n" + undiciLicense.trimEnd() + "\n*/\n"
     + declarations(undiciWebSocket, "undici-types/websocket.d.ts", [], ["MessageEvent"]));
 
@@ -233,7 +242,7 @@ const fallbackNames = ["CpuUsage", "ProcessEnv", "Signals"];
 const fallback = declarations(processMembers.replace(/^export (?=interface|type)/gm, ""), "process-types.d.ts", [], fallbackNames);
 await emit("select/process-support.d.ts",
     declarations(nodeGlobals, "legacy/globals.d.ts", ["NodeJS"], ["Dict", "RefCounted"])
-    + "\n\n" + declarations(moduleTypes, "module.d.ts", ["node:module", "global", "NodeJS"], ["Module"]) + "\n\n" + fallback);
+    + "\n\n" + declarations(await source("legacy/module-globals.d.ts"), "legacy/module-globals.d.ts", ["node:module", "global", "NodeJS"], ["Module"]) + "\n\n" + fallback);
 await emit("select/process-context.d.ts", 'import type * as Fallback from "./process-support.js";\n\n'
     + "export interface LocalProcessTypes {}\n"
     + "type Lookup<K, Default = never> = K extends keyof LocalProcessTypes ? LocalProcessTypes[K] : Default;\n"
@@ -260,6 +269,10 @@ await emit("select/global-emitted-types.d.ts", [
     emittedModule("process-context", nodeAliases(contextNames.filter(name => name !== "ProcessEventMap"))
         + '\nexport type { ProcessEventMap } from "node:process";'),
     emittedModule("process-types", nodeAliases(processNames) + '\nexport type { ProcessEventMap } from "node:process";'),
+    emittedModule("runtime-types", nodeAliases(["Architecture", "Dict", "Module", "PartialOptions", "Platform", "ProcessEnv", "ReadOnlyDict", "Require", "RequireExtensions", "RequireResolve", "RequireResolveOptions", "Signals"])),
+    emittedModule("base-types", nodeAliases(["ErrnoException", "Iterator"])),
+    emittedModule("import-attributes", 'export type { ImportAttributes, ImportPhase } from "node:module";'),
+    emittedModule("timer-types", nodeAliases(["Immediate", "Timer", "Timeout"])),
     emittedModule("process-support", nodeAliases(["Dict", "Module", "RefCounted", ...fallbackNames])),
     emittedModule("zlib-nodejs", nodeAliases(["ArrayBufferView", "AsyncIterator", "ErrnoException", "EventEmitter",
         "Iterator", "ReadableStream", "ReadWriteStream", "WritableStream"])),
@@ -267,3 +280,88 @@ await emit("select/global-emitted-types.d.ts", [
     emittedModule("process-web", 'export type { ImportAttributes, ImportPhase } from "node:module";\n'
         + 'export type { MessageEvent } from "node/select/undici.js";'),
 ].join("\n"));
+
+// Libraries can publish these names in CJS or ESM. Restore Undici's original
+// identities, including downstream module augmentations, in a full Node consumer.
+const undiciModules = [
+    ["headers", "fetch"], ["fetch", "fetch"], ["http-formdata", "formdata"], ["http-websocket", "websocket"],
+    ["eventsource", "eventsource"], ["http-body", "readable"], ["http-dispatcher", "dispatcher"],
+];
+const undiciBindings = undiciModules.map(([local, upstream]) => {
+    const specifier = JSON.stringify("undici-types/" + upstream + ".js");
+    const hasDefault = upstream === "readable" || upstream === "dispatcher";
+    const members = "export * from " + specifier + ";" + (hasDefault ? "\nexport { default } from " + specifier + ";" : "");
+    return [".js", ""].map(extension => 'declare module "node/select/' + local + extension + '" {\n'
+        + indent(members, 4) + "\n}").join("\n");
+});
+await emit("select/full-environment.d.ts", ['declare module "node/select/undici.js" {\n    export * from "undici-types";\n}',
+    ...undiciBindings].join("\n"));
+
+const moduleGlobals = await source("legacy/module-globals.d.ts");
+await emit("select/runtime-types.d.ts",
+    'import type { Dict, Module } from "./process-support.js";\nexport type { Dict, Module, ProcessEnv, Signals } from "./process-support.js";\n\n'
+    + declarations(nodeGlobals, "legacy/globals.d.ts", ["NodeJS"], ["ReadOnlyDict", "PartialOptions"]) + "\n\n"
+    + declarations(processMembers.replace(/^export /gm, ""), "process-types.d.ts", [], ["Architecture", "Platform"]) + "\n\n"
+    + declarations(moduleGlobals, "legacy/module-globals.d.ts", ["node:module", "global", "NodeJS"],
+        ["Require", "RequireExtensions", "RequireResolveOptions", "RequireResolve"]));
+await emit("select/timer-types.d.ts", 'import type { RefCounted } from "./process-support.js";\n'
+    + 'import { type Disposable, Symbol } from "node/select/disposal.js";\n\n'
+    + declarations(await source("legacy/timers-globals.d.ts"), "legacy/timers-globals.d.ts", ["node:timers", "global", "NodeJS"],
+        ["Immediate", "Timer", "Timeout"]));
+const timers = await source("web-globals/timers.d.ts");
+await emit("select/timer-functions.d.ts", 'import type * as NodeJS from "./timer-types.js";\n'
+    + between(timers, "export {};\n", "declare global {").trimStart() + "\n"
+    + unindent(between(timers, "declare global {\n", "\n    function queueMicrotask"), 4)
+        .replace(/^(function|namespace) /gm, "export declare $1 "));
+// Only the Headers instance is used by outgoing HTTP messages. Importing Undici's
+// Fetch entry here would install its Node globals even in a module-only program.
+const fetchTypes = await readFile(new URL("./fetch.d.ts", undiciFile), "utf8");
+const headers = between(fetchTypes, "export interface SpecIterator<", "\nexport type RequestCache");
+await emit("select/headers.d.ts", "/* From undici-types/fetch.d.ts\n" + undiciLicense.trimEnd() + "\n*/\n"
+    + fetchTypes.slice(0, fetchTypes.indexOf('/// <reference'))
+    + 'import type { HeaderRecord } from "undici-types/header";\n\nexport interface SpecIterator<' + headers);
+
+await emit("select/import-attributes.d.ts", 'import type * as Runtime from "./process-support.js";\n\n'
+    + declarations(moduleTypes, "module.d.ts", ["node:module", "Module"], ["ImportAttributes", "ImportPhase"]));
+
+// HTTP exposes Undici's constructors even without a DOM. Project the declarations
+// reachable from those constructors, leaving Undici's global reference directives behind.
+const license = "/* From undici-types.\n" + undiciLicense.trimEnd() + "\n*/\n";
+const undiciSource = name => readFile(new URL("./" + name + ".d.ts", undiciFile), "utf8");
+const socketTypes = between(undiciWebSocket, "export type BinaryType", "interface WebSocketStreamOptions");
+await emit("select/http-websocket.d.ts", license
+    + 'import type { Blob } from "node:buffer";\nimport type { MessagePort } from "node:worker_threads";\n'
+    + 'import type { URL } from "node:url";\nimport type { Event, EventTarget, EventListenerOptions } from "./event-bindings.js";\n'
+    + 'import type { AddEventListenerOptions, EventListener, EventListenerObject } from "./listener-bindings.js";\n'
+    + 'import type { EventInit } from "./events.js";\nimport type Dispatcher from "./http-dispatcher.js";\n'
+    + 'import type { HeadersInit } from "./headers.js";\n\ntype EventListenerOrEventListenerObject = EventListener | EventListenerObject;\n'
+    + "export type BinaryType" + socketTypes);
+const dispatcher = (await undiciSource("dispatcher")).replace("import Errors from './errors'", "")
+    .replaceAll("Errors.UndiciError", "UndiciError").replace("'./readable'", "'./http-body.js'")
+    .replace("'./formdata'", "'./http-formdata.js'").replace("'./header'", "'undici-types/header.js'")
+    .replace("'./utility'", "'undici-types/utility.js'");
+const error = between(await undiciSource("errors"), "  export class UndiciError", "\n  }");
+await emit("select/http-dispatcher.d.ts", license + 'import type { Buffer } from "node:buffer";\n'
+    + 'import type { HostAbortSignal as AbortSignal } from "./stream-dependencies.js";\n'
+    + "declare class UndiciError" + error + "\n}\n" + dispatcher);
+await emit("select/http-body.d.ts", license + 'import type { HostAbortSignal as AbortSignal } from "./stream-dependencies.js";\n'
+    + await undiciSource("readable"));
+await emit("select/http-formdata.d.ts", license + (await undiciSource("formdata")).replace('/// <reference types="node" />', "")
+    .replace("'./fetch'", "'./headers.js'"));
+
+// The global selector uses the same isolated constructors as HTTP. Full Node
+// rebinds its Undici import to the installed package in full-environment.d.ts.
+const headerStart = fetchTypes.indexOf("export interface SpecIterator<");
+const headerEnd = fetchTypes.indexOf("export type RequestCache", headerStart);
+if (headerStart < 0 || headerEnd < 0) throw new Error("Missing Undici Headers declarations");
+await emit("select/fetch.d.ts", license + (fetchTypes.slice(0, headerStart) + fetchTypes.slice(headerEnd))
+    .replace('/// <reference types="node" />', 'import type { HostAbortSignal as AbortSignal } from "./stream-dependencies.js";\n'
+        + 'import type * as NodeJS from "node/select/byte-types.js";\nimport type { Headers, HeadersInit } from "./headers.js";')
+    .replace("import { HeaderRecord } from './header'\n", "").replace("'./formdata'", "'./http-formdata.js'")
+    .replace("'./dispatcher'", "'./http-dispatcher.js'"));
+await emit("select/eventsource.d.ts", license + 'import type { URL } from "node:url";\n'
+    + 'import type { Event, EventTarget, EventListenerOptions } from "./event-bindings.js";\n'
+    + 'import type { AddEventListenerOptions, EventListener, EventListenerObject } from "./listener-bindings.js";\n'
+    + 'type EventListenerOrEventListenerObject = EventListener | EventListenerObject;\n'
+    + (await undiciSource("eventsource")).replace("'./websocket'", "'./http-websocket.js'")
+        .replace("'./dispatcher'", "'./http-dispatcher.js'").replace(/import \{\s*EventListenerOptions,[\s\S]+?from '\.\/patch'/, ""));

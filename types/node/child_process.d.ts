@@ -2,8 +2,8 @@
 /// <reference path="./net.d.ts" />
 declare module "node:child_process" {
     import type { AbortSignal, Buffer, BufferEncoding } from "node/select/buffer-bindings.js";
-    import { Symbol } from "node/select/zlib-bindings.js";
-    import type { Scope as NodeJS } from "node/select/process-bindings.js";
+    import { Symbol } from "node/select/disposal.js";
+    import type { Scope as NodeJS } from "node/select/child-process-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import * as dgram from "node:dgram";
     import { Abortable, EventEmitter, InternalEventEmitter } from "node:events";

@@ -69,7 +69,11 @@ function writeProtocolsToFile(jsonProtocols: string[]) {
         .map(trimRight)
         .join("\n");
 
-    writeFileSync("./inspector.generated.d.ts", inspectorDts, "utf8");
+    const start = inspectorDts.indexOf('declare module "node:inspector/promises"');
+    if (start < 0) throw new Error("Missing promises protocol declarations");
+    const header = inspectorDts.slice(0, inspectorDts.indexOf("declare module"));
+    writeFileSync("./inspector.generated.d.ts", inspectorDts.slice(0, start).trimEnd() + "\n", "utf8");
+    writeFileSync("./inspector/promises.generated.d.ts", header + inspectorDts.slice(start), "utf8");
 }
 
 /**

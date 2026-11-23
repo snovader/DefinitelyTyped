@@ -1,4 +1,6 @@
+/// <reference path="./util.d.ts" />
 declare module "node:console" {
+    import type { Scope as NodeJS } from "node/select/zlib-bindings.js";
     import { InspectOptions } from "node:util";
     namespace console {
         interface ConsoleOptions {
@@ -90,4 +92,11 @@ declare module "node:console" {
 declare module "console" {
     import console = require("node:console");
     export = console;
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:console": typeof import("node:console");
+        "console": typeof import("console");
+    }
 }

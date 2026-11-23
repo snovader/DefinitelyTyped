@@ -1,3 +1,4 @@
+/// <reference path="../stream.d.ts" />
 declare module "node:stream/promises" {
     import type { Scope as NodeJS } from "node/select/zlib-bindings.js";
     import { Abortable } from "node:events";

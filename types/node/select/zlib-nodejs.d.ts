@@ -4,13 +4,4 @@ export type { NodeAsyncIterator as AsyncIterator } from "./stream-dependencies.j
 export type { EventEmitter } from "./emitter.js";
 export type { ReadableStream, ReadWriteStream, WritableStream } from "./stream-types.js";
 
-export interface Iterator<T, TReturn = undefined, TNext = any> extends IteratorObject<T, TReturn, TNext> {
-    [Symbol.iterator](): Iterator<T, TReturn, TNext>;
-}
-
-export interface ErrnoException extends Error {
-    errno?: number;
-    code?: string;
-    path?: string;
-    syscall?: string;
-}
+export type { ErrnoException, Iterator } from "./base-types.js";

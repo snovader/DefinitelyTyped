@@ -1,9 +1,8 @@
 /// <reference path="./select/async-hooks.d.ts" />
 declare module "node:events" {
-    import type { Disposable, Event, EventListenerOptions, EventTarget, Scope as NodeJS } from "node/select/zlib-bindings.js";
-    import type { AbortSignal } from "node/select/buffer-bindings.js";
+    import type { AbortSignal, Disposable, Event, EventListenerOptions, EventTarget, Scope as NodeJS } from "node/select/event-bindings.js";
     import { AsyncResource, AsyncResourceOptions } from "node:async_hooks";
-    import type { EventMap } from "node/select/emitter.js";
+    type EventMap<T> = Record<keyof T, any[]>;
     interface EventEmitterEventMap {
         newListener: [eventName: string | symbol, listener: (...args: any[]) => void];
         removeListener: [eventName: string | symbol, listener: (...args: any[]) => void];

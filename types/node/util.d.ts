@@ -1,4 +1,10 @@
+/// <reference path="./util/types.d.ts" />
 declare module "node:util" {
+    import type { AbortController } from "node/select/abort-bindings.js";
+    import type { AbortSignal } from "node/select/buffer-bindings.js";
+    import type { Scope as Runtime } from "node/select/runtime-bindings.js";
+    import type { Scope as NodeJS } from "node/select/zlib-bindings.js";
+    import type { Scope as Bytes } from "node/select/array-bindings.js";
     export * as types from "node:util/types";
     export type InspectStyle =
         | "special"
@@ -750,7 +756,7 @@ declare module "node:util" {
      * @param signal A signal name (e.g. `'SIGTERM'`)
      * @returns The exit code corresponding to `signal`
      */
-    export function convertProcessSignalToExitCode(signal: NodeJS.Signals): number;
+    export function convertProcessSignalToExitCode(signal: Runtime.Signals): number;
     export type DebugLoggerFunction = (msg: string, ...param: unknown[]) => void;
     export interface DebugLogger extends DebugLoggerFunction {
         /**
@@ -1193,7 +1199,7 @@ declare module "node:util" {
      * @param content The raw contents of a `.env` file.
      * @since v20.12.0
      */
-    export function parseEnv(content: string): NodeJS.Dict<string>;
+    export function parseEnv(content: string): Runtime.Dict<string>;
     export interface StyleTextOptions {
         /**
          * When true, `stream` is checked to see if it can handle colors.
@@ -1659,14 +1665,14 @@ declare module "node:util" {
         written: number;
     }
     export interface TextDecoder extends TextDecoderCommon {
-        decode(input?: NodeJS.AllowSharedBufferSource, options?: TextDecodeOptions): string;
+        decode(input?: Bytes.AllowSharedBufferSource, options?: TextDecodeOptions): string;
     }
     export var TextDecoder: {
         prototype: TextDecoder;
         new(label?: string, options?: TextDecoderOptions): TextDecoder;
     };
     export interface TextEncoder extends TextEncoderCommon {
-        encode(input?: string): NodeJS.NonSharedUint8Array;
+        encode(input?: string): Bytes.NonSharedUint8Array;
         encodeInto(source: string, destination: Uint8Array): TextEncoderEncodeIntoResult;
     }
     export var TextEncoder: {
@@ -1677,4 +1683,11 @@ declare module "node:util" {
 }
 declare module "util" {
     export * from "node:util";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:util": typeof import("node:util");
+        "util": typeof import("util");
+    }
 }

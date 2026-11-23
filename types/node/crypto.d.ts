@@ -1,4 +1,7 @@
+/// <reference path="./tls.d.ts" />
 declare module "node:crypto" {
+    import type { BufferEncoding } from "node/select/buffer-bindings.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import { Transform, TransformOptions, Writable, WritableOptions } from "node:stream";
     import { PeerCertificate } from "node:tls";
@@ -3961,4 +3964,11 @@ declare module "node:crypto" {
 }
 declare module "crypto" {
     export * from "node:crypto";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:crypto": typeof import("node:crypto");
+        "crypto": typeof import("crypto");
+    }
 }

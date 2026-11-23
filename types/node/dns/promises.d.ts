@@ -1,3 +1,4 @@
+/// <reference path="../dns.d.ts" />
 declare module "node:dns/promises" {
     import {
         AnyRecord,

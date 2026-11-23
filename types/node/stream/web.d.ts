@@ -9,7 +9,7 @@ declare module "node:stream/web" {
         TextDecoderCommon,
         TextDecoderOptions,
         TextEncoderCommon,
-    } from "node/select/buffer-bindings.js";
+    } from "node/select/stream-web-bindings.js";
     type CompressionFormat = "brotli" | "deflate" | "deflate-raw" | "gzip";
     type ReadableStreamController<T> = ReadableStreamDefaultController<T> | ReadableByteStreamController;
     type ReadableStreamReader<T> = ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader;

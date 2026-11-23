@@ -1,4 +1,8 @@
+/// <reference path="./fs.d.ts" />
 declare module "node:sqlite" {
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
+    import type { Scope as Runtime } from "node/select/runtime-bindings.js";
+    import { Disposable, Scope as Streams, Symbol } from "node/select/zlib-bindings.js";
     import { PathLike } from "node:fs";
     type SQLInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
     type SQLOutputValue = null | number | bigint | string | NodeJS.NonSharedUint8Array;
@@ -96,7 +100,7 @@ declare module "node:sqlite" {
          * built. The following properties are supported:
          * @since v25.8.0
          */
-        limits?: NodeJS.PartialOptions<DatabaseLimits> | undefined;
+        limits?: Runtime.PartialOptions<DatabaseLimits> | undefined;
     }
     interface DatabaseLimits {
         length: number;
@@ -762,7 +766,7 @@ declare module "node:sqlite" {
         iterate(
             stringElements: TemplateStringsArray,
             ...boundParameters: SQLInputValue[]
-        ): NodeJS.Iterator<Record<string, SQLOutputValue>>;
+        ): Streams.Iterator<Record<string, SQLOutputValue>>;
         /**
          * Executes the given SQL query, which is expected to not return any rows (e.g., INSERT, UPDATE, DELETE).
          *
@@ -917,11 +921,11 @@ declare module "node:sqlite" {
          * returned by executing the prepared statement. The keys and values of each
          * object correspond to the column names and values of the row.
          */
-        iterate(...anonymousParameters: SQLInputValue[]): NodeJS.Iterator<Record<string, SQLOutputValue>>;
+        iterate(...anonymousParameters: SQLInputValue[]): Streams.Iterator<Record<string, SQLOutputValue>>;
         iterate(
             namedParameters: Record<string, SQLInputValue>,
             ...anonymousParameters: SQLInputValue[]
-        ): NodeJS.Iterator<Record<string, SQLOutputValue>>;
+        ): Streams.Iterator<Record<string, SQLOutputValue>>;
         /**
          * This method executes a prepared statement and returns an object summarizing the
          * resulting changes. The prepared statement [parameters are bound](https://www.sqlite.org/c3ref/bind_blob.html) using the
@@ -1136,5 +1140,11 @@ declare module "node:sqlite" {
         const SQLITE_SAVEPOINT: number;
         const SQLITE_COPY: number;
         const SQLITE_RECURSIVE: number;
+    }
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:sqlite": typeof import("node:sqlite");
     }
 }

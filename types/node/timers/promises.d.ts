@@ -1,4 +1,7 @@
+/// <reference path="../timers.d.ts" />
 declare module "node:timers/promises" {
+    import type { Scope as NodeJS } from "node/select/event-bindings.js";
+    import type { AbortSignal } from "node/select/stream-web-bindings.js";
     import { TimerOptions } from "node:timers";
     /**
      * ```js
@@ -90,4 +93,11 @@ declare module "node:timers/promises" {
 }
 declare module "timers/promises" {
     export * from "node:timers/promises";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:timers/promises": typeof import("node:timers/promises");
+        "timers/promises": typeof import("timers/promises");
+    }
 }

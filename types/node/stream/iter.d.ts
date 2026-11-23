@@ -1,3 +1,4 @@
+/// <reference path="../stream.d.ts" />
 declare module "node:stream/iter" {
     import type { AsyncDisposable, Disposable, Scope as NodeJS } from "node/select/zlib-bindings.js";
     import type { AbortSignal } from "node/select/buffer-bindings.js";

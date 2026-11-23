@@ -87,3 +87,10 @@ declare module "node:punycode" {
 declare module "punycode" {
     export * from "node:punycode";
 }
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:punycode": typeof import("node:punycode");
+        "punycode": typeof import("punycode");
+    }
+}

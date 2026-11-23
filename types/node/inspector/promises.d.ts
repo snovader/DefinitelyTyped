@@ -1,3 +1,5 @@
+/// <reference path="../inspector.d.ts" />
+/// <reference path="./promises.generated.d.ts" />
 declare module "node:inspector/promises" {
     import { EventEmitter } from "node:events";
     export { close, console, NetworkResources, open, url, waitForDebugger } from "node:inspector";
@@ -32,4 +34,11 @@ declare module "node:inspector/promises" {
 }
 declare module "inspector/promises" {
     export * from "node:inspector/promises";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:inspector/promises": typeof import("node:inspector/promises");
+        "inspector/promises": typeof import("inspector/promises");
+    }
 }

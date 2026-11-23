@@ -1,4 +1,5 @@
 /// <reference path="./global-emitted-types.d.ts" />
+/// <reference path="./global-module-bindings.d.ts" />
 declare module "node/select/process-bindings.js" {
     export import AddEventListenerOptions = globalThis.AddEventListenerOptions;
     export import EventListener = globalThis.EventListener;

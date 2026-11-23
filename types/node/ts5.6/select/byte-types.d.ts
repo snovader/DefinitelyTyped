@@ -102,3 +102,5 @@ export type NonSharedDataView = DataView;
 export type NonSharedTypedArray = TypedArray;
 export type NonSharedArrayBufferView = ArrayBufferView;
 export type BufferSource = NonSharedArrayBufferView | ArrayBuffer;
+export type AllowSharedBufferSource = ArrayBufferView | ArrayBufferLike;
+export { type Float16Array };

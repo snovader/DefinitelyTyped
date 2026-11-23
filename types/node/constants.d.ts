@@ -1,3 +1,6 @@
+/// <reference path="./crypto.d.ts" />
+/// <reference path="./fs.d.ts" />
+/// <reference path="./os.d.ts" />
 declare module "node:constants" {
     const constants:
         & typeof import("node:os").constants.dlopen
@@ -11,4 +14,11 @@ declare module "node:constants" {
 declare module "constants" {
     import constants = require("node:constants");
     export = constants;
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:constants": typeof import("node:constants");
+        "constants": typeof import("constants");
+    }
 }

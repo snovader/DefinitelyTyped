@@ -1,11 +1,16 @@
+/// <reference path="./crypto.d.ts" />
+/// <reference path="./net.d.ts" />
 declare module "node:tls" {
+    import type { Scope as Runtime } from "node/select/runtime-bindings.js";
+    import type { Buffer } from "node/select/buffer-bindings.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import { X509Certificate } from "node:crypto";
     import * as net from "node:net";
     import * as stream from "stream";
     const CLIENT_RENEG_LIMIT: number;
     const CLIENT_RENEG_WINDOW: number;
-    interface Certificate extends NodeJS.Dict<string | string[]> {
+    interface Certificate extends Runtime.Dict<string | string[]> {
         /**
          * Country code.
          */
@@ -88,7 +93,7 @@ declare module "node:tls" {
         /**
          * An array describing the AuthorityInfoAccess, used with OCSP.
          */
-        infoAccess?: NodeJS.Dict<string[]>;
+        infoAccess?: Runtime.Dict<string[]>;
         /**
          * For RSA keys: The RSA bit size.
          *
@@ -1229,4 +1234,11 @@ declare module "node:tls" {
 }
 declare module "tls" {
     export * from "node:tls";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:tls": typeof import("node:tls");
+        "tls": typeof import("tls");
+    }
 }

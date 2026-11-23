@@ -1,4 +1,6 @@
+/// <reference path="./child_process.d.ts" />
 declare module "node:cluster" {
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
     import * as child_process from "node:child_process";
     import { EventEmitter, InternalEventEmitter } from "node:events";
     class Worker implements EventEmitter {
@@ -429,4 +431,11 @@ declare module "node:cluster" {
 declare module "cluster" {
     import cluster = require("node:cluster");
     export = cluster;
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:cluster": typeof import("node:cluster");
+        "cluster": typeof import("cluster");
+    }
 }

@@ -1,4 +1,8 @@
+/// <reference path="./buffer.d.ts" />
 declare module "node:ffi" {
+    import { Disposable, Symbol } from "node/select/disposal.js";
+    import type { Buffer, BufferEncoding } from "node/select/buffer-bindings.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     interface FunctionSignature {
         return?: ReturnType | undefined;
@@ -496,5 +500,11 @@ declare module "node:ffi" {
         UINT_64 = "uint64",
         FLOAT_32 = "float32",
         FLOAT_64 = "float64",
+    }
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:ffi": typeof import("node:ffi");
     }
 }

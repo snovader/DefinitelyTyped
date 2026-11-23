@@ -1,7 +1,11 @@
+/// <reference path="./buffer.d.ts" />
 declare module "node:vm" {
-    import type { ImportAttributes, ImportPhase, Scope as NodeJS } from "node/select/process-bindings.js";
+    import type { ImportMeta } from "node/select/import-meta-bindings.js";
+    import type { ImportAttributes, ImportPhase } from "node/select/import-attributes.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
+    import type { Scope as Runtime } from "node/select/runtime-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
-    interface Context extends NodeJS.Dict<any> {}
+    interface Context extends Runtime.Dict<any> {}
     interface BaseOptions {
         /**
          * Specifies the filename used in stack traces produced by this script.

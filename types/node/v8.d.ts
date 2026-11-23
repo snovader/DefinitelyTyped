@@ -1,7 +1,8 @@
+/// <reference path="./stream.d.ts" />
 declare module "node:v8" {
     import type { Buffer } from "node/select/buffer-bindings.js";
-    import { Symbol } from "node/select/zlib-bindings.js";
-    import type { Scope as NodeJS } from "node/select/process-bindings.js";
+    import { Symbol } from "node/select/disposal.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import { Readable } from "node:stream";
     interface HeapSpaceInfo {

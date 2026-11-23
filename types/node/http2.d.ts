@@ -1,4 +1,10 @@
+/// <reference path="./fs.d.ts" />
+/// <reference path="./tls.d.ts" />
+/// <reference path="./url.d.ts" />
 declare module "node:http2" {
+    import type { Scope as Streams } from "node/select/zlib-bindings.js";
+    import type { AbortSignal, Buffer, BufferEncoding } from "node/select/buffer-bindings.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import { InternalEventEmitter } from "node:events";
     import * as fs from "node:fs";
@@ -50,7 +56,7 @@ declare module "node:http2" {
         length?: number | undefined;
     }
     interface ServerStreamFileResponseOptionsWithError extends ServerStreamFileResponseOptions {
-        onError?: ((err: NodeJS.ErrnoException) => void) | undefined;
+        onError?: ((err: Streams.ErrnoException) => void) | undefined;
     }
     interface Http2StreamEventMap extends stream.DuplexEventMap {
         "aborted": [];
@@ -2495,4 +2501,11 @@ declare module "node:http2" {
 }
 declare module "http2" {
     export * from "node:http2";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:http2": typeof import("node:http2");
+        "http2": typeof import("http2");
+    }
 }

@@ -1,4 +1,5 @@
 declare module "node:querystring" {
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
     interface StringifyOptions {
         /**
          * The function to use when converting URL-unsafe characters to percent-encoding in the query string.
@@ -136,4 +137,11 @@ declare module "node:querystring" {
 }
 declare module "querystring" {
     export * from "node:querystring";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:querystring": typeof import("node:querystring");
+        "querystring": typeof import("querystring");
+    }
 }

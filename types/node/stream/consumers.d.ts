@@ -1,4 +1,9 @@
+/// <reference path="../buffer.d.ts" />
+/// <reference path="../events.d.ts" />
+/// <reference path="./web.d.ts" />
 declare module "node:stream/consumers" {
+    import type { Scope as NodeJS } from "node/select/zlib-bindings.js";
+    import type { Scope as Bytes } from "node/select/array-bindings.js";
     import { Blob, NonSharedBuffer } from "node:buffer";
     import { ReadableStream } from "node:stream/web";
     /**
@@ -69,7 +74,7 @@ declare module "node:stream/consumers" {
      */
     function bytes(
         stream: ReadableStream | NodeJS.ReadableStream | AsyncIterable<any>,
-    ): Promise<NodeJS.NonSharedUint8Array>;
+    ): Promise<Bytes.NonSharedUint8Array>;
     /**
      * ```js
      * import { json } from 'node:stream/consumers';
@@ -111,4 +116,11 @@ declare module "node:stream/consumers" {
 }
 declare module "stream/consumers" {
     export * from "node:stream/consumers";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:stream/consumers": typeof import("node:stream/consumers");
+        "stream/consumers": typeof import("stream/consumers");
+    }
 }

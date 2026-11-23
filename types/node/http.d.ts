@@ -1,4 +1,10 @@
+/// <reference path="./worker_threads.d.ts" />
+/// <reference path="./net.d.ts" />
+/// <reference path="./url.d.ts" />
 declare module "node:http" {
+    import type { AbortSignal } from "node/select/buffer-bindings.js";
+    import type { Headers } from "node/select/headers-bindings.js";
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import { LookupOptions } from "node:dns";
     import { EventEmitter } from "node:events";
@@ -2203,16 +2209,23 @@ declare module "node:http" {
      * A browser-compatible implementation of `WebSocket`.
      * @since v22.5.0
      */
-    const WebSocket: typeof import("node/select/undici.js").WebSocket;
+    const WebSocket: typeof import("node/select/http-bindings.js").WebSocket;
     /**
      * @since v22.5.0
      */
-    const CloseEvent: typeof import("node/select/undici.js").CloseEvent;
+    const CloseEvent: typeof import("node/select/http-bindings.js").CloseEvent;
     /**
      * @since v22.5.0
      */
-    const MessageEvent: typeof import("node/select/undici.js").MessageEvent;
+    const MessageEvent: typeof import("node/select/http-bindings.js").MessageEvent;
 }
 declare module "http" {
     export * from "node:http";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:http": typeof import("node:http");
+        "http": typeof import("http");
+    }
 }

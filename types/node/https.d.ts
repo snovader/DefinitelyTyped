@@ -1,3 +1,5 @@
+/// <reference path="./http.d.ts" />
+/// <reference path="./tls.d.ts" />
 declare module "node:https" {
     import * as http from "node:http";
     import { Duplex } from "node:stream";
@@ -397,4 +399,11 @@ declare module "node:https" {
 }
 declare module "https" {
     export * from "node:https";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:https": typeof import("node:https");
+        "https": typeof import("https");
+    }
 }

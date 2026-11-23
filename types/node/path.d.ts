@@ -176,3 +176,10 @@ declare module "path" {
     import path = require("node:path");
     export = path;
 }
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:path": typeof import("node:path");
+        "path": typeof import("path");
+    }
+}

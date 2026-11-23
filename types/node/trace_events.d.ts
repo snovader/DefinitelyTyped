@@ -101,3 +101,10 @@ declare module "node:trace_events" {
 declare module "trace_events" {
     export * from "node:trace_events";
 }
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:trace_events": typeof import("node:trace_events");
+        "trace_events": typeof import("trace_events");
+    }
+}

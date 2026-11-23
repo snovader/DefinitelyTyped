@@ -1,6 +1,6 @@
 /// <reference path="./dns/promises.d.ts" />
 declare module "node:dns" {
-    import type { Scope as NodeJS } from "node/select/zlib-bindings.js";
+    import type { Scope as NodeJS } from "node/select/base-bindings.js";
     // Supported getaddrinfo flags.
     /**
      * Limits returned address types to the types of non-loopback addresses configured on the system. For example, IPv4 addresses are

@@ -1,4 +1,6 @@
+/// <reference path="../stream/iter.d.ts" />
 declare module "node:zlib/iter" {
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     import { StatefulTransform, SyncStatefulTransform } from "node:stream/iter";
     interface BrotliOptions {
         chunkSize?: number | undefined;

@@ -1,3 +1,4 @@
+/// <reference path="./stream.d.ts" />
 /// <reference path="./dns.d.ts" />
 declare module "node:net" {
     import type { AbortSignal, BufferEncoding } from "node/select/buffer-bindings.js";

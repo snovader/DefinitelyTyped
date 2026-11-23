@@ -1,3 +1,4 @@
+/// <reference path="./net.d.ts" />
 declare module "node:dgram" {
     import { type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
     import { NonSharedBuffer } from "node:buffer";

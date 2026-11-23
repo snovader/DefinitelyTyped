@@ -1,3 +1,4 @@
+/// <reference path="./assert/strict.d.ts" />
 declare module "node:assert" {
     import strict = require("node:assert/strict");
     /**
@@ -1074,4 +1075,11 @@ declare module "node:assert" {
 declare module "assert" {
     import assert = require("node:assert");
     export = assert;
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:assert": typeof import("node:assert");
+        "assert": typeof import("assert");
+    }
 }

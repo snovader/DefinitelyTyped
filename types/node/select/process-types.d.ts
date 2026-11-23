@@ -6,7 +6,7 @@ import { Control, MessageOptions, SendHandle } from "node:child_process";
 import { PathLike } from "node:fs";
 import * as tty from "node:tty";
 import { Worker } from "node:worker_threads";
-type OptionalBuiltins = import("./optional-builtins.js").OptionalBuiltins;
+type OptionalBuiltins = import("node/select/optional-builtins.js").OptionalBuiltins;
 interface BuiltInModule extends OptionalBuiltins {
     "async_hooks": typeof import("async_hooks");
     "node:async_hooks": typeof import("node:async_hooks");

@@ -1,4 +1,7 @@
+/// <reference path="./events.d.ts" />
+/// <reference path="./inspector.generated.d.ts" />
 declare module "node:inspector" {
+    import type { Disposable } from "node/select/disposal.js";
     import { EventEmitter } from "node:events";
     /**
      * The `inspector.Session` is used for dispatching messages to the V8 inspector
@@ -262,4 +265,11 @@ declare module "node:inspector" {
 }
 declare module "inspector" {
     export * from "node:inspector";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:inspector": typeof import("node:inspector");
+        "inspector": typeof import("inspector");
+    }
 }

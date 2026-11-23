@@ -1,4 +1,7 @@
+/// <reference path="../crypto.d.ts" />
 declare module "node:util/types" {
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
+    import type { Float16Array } from "node/select/float16-bindings.js";
     import { KeyObject, webcrypto } from "node:crypto";
     /**
      * Returns `true` if the value is a built-in [`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer) or
@@ -555,4 +558,11 @@ declare module "node:util/types" {
 }
 declare module "util/types" {
     export * from "node:util/types";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:util/types": typeof import("node:util/types");
+        "util/types": typeof import("util/types");
+    }
 }

@@ -1,4 +1,9 @@
+/// <reference path="./readline.d.ts" />
+/// <reference path="./util.d.ts" />
+/// <reference path="./vm.d.ts" />
 declare module "node:repl" {
+    import type { Scope as NodeJS } from "node/select/zlib-bindings.js";
+    import type { Scope as Runtime } from "node/select/runtime-bindings.js";
     import { AsyncCompleter, Completer, Interface, InterfaceEventMap } from "node:readline";
     import { InspectOptions } from "node:util";
     import { Context } from "node:vm";
@@ -188,7 +193,7 @@ declare module "node:repl" {
         /**
          * The commands registered via `replServer.defineCommand()`.
          */
-        readonly commands: NodeJS.ReadOnlyDict<REPLCommand>;
+        readonly commands: Runtime.ReadOnlyDict<REPLCommand>;
         /**
          * A value indicating whether the REPL is currently in "editor mode".
          *
@@ -417,4 +422,11 @@ declare module "node:repl" {
 }
 declare module "repl" {
     export * from "node:repl";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:repl": typeof import("node:repl");
+        "repl": typeof import("repl");
+    }
 }

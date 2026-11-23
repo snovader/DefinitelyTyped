@@ -1,3 +1,4 @@
+/// <reference path="./net.d.ts" />
 declare module "node:tty" {
     import * as net from "node:net";
     /**

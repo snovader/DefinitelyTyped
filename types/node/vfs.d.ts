@@ -1,3 +1,4 @@
+/// <reference path="./fs.d.ts" />
 declare module "node:vfs" {
     /**
      * Convenience factory equivalent to `new VirtualFileSystem(provider, options)`.
@@ -207,5 +208,11 @@ declare module "node:vfs" {
          * @since v26.4.0
          */
         readonly rootPath: string;
+    }
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:vfs": typeof import("node:vfs");
     }
 }

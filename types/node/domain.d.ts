@@ -1,3 +1,4 @@
+/// <reference path="./events.d.ts" />
 declare module "node:domain" {
     import { EventEmitter } from "node:events";
     /**
@@ -147,4 +148,11 @@ declare module "node:domain" {
 }
 declare module "domain" {
     export * from "node:domain";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:domain": typeof import("node:domain");
+        "domain": typeof import("domain");
+    }
 }

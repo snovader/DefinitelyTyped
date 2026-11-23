@@ -1,4 +1,7 @@
+/// <reference path="./buffer.d.ts" />
 declare module "node:os" {
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
+    import type { BufferEncoding } from "node/select/buffer-bindings.js";
     import { NonSharedBuffer } from "buffer";
     interface CpuInfo {
         model: string;
@@ -495,4 +498,11 @@ declare module "node:os" {
 }
 declare module "os" {
     export * from "node:os";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:os": typeof import("node:os");
+        "os": typeof import("os");
+    }
 }

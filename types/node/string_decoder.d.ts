@@ -1,4 +1,7 @@
+/// <reference path="./buffer.d.ts" />
 declare module "node:string_decoder" {
+    import type { BufferEncoding } from "node/select/buffer-bindings.js";
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
     class StringDecoder {
         constructor(encoding?: BufferEncoding);
         /**
@@ -24,4 +27,11 @@ declare module "node:string_decoder" {
 }
 declare module "string_decoder" {
     export * from "node:string_decoder";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:string_decoder": typeof import("node:string_decoder");
+        "string_decoder": typeof import("string_decoder");
+    }
 }

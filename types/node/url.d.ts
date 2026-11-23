@@ -1,4 +1,7 @@
+/// <reference path="./http.d.ts" />
+/// <reference path="./querystring.d.ts" />
 declare module "node:url" {
+    import type { Scope as NodeJS } from "node/select/base-bindings.js";
     import { Blob, NonSharedBuffer } from "node:buffer";
     import { ClientRequestArgs } from "node:http";
     import { ParsedUrlQuery, ParsedUrlQueryInput } from "node:querystring";
@@ -553,4 +556,11 @@ declare module "node:url" {
 }
 declare module "url" {
     export * from "node:url";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:url": typeof import("node:url");
+        "url": typeof import("url");
+    }
 }

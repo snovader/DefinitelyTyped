@@ -1,4 +1,10 @@
+/// <reference path="./assert.d.ts" />
+/// <reference path="./test/reporters.d.ts" />
+/// <reference path="./url.d.ts" />
 declare module "node:test" {
+    import type { AbortSignal } from "node/select/buffer-bindings.js";
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
+    import { Symbol } from "node/select/disposal.js";
     import { AssertMethodNames, AssertPredicate } from "node:assert";
     import { Readable, ReadableEventMap } from "node:stream";
     import { TestEvent } from "node:test/reporters";
@@ -2555,4 +2561,10 @@ declare module "node:test" {
         [K in keyof T]: T[K] extends Function ? K : never;
     }[keyof T];
     export = test;
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:test": typeof import("node:test");
+    }
 }

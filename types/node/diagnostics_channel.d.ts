@@ -1,4 +1,7 @@
+/// <reference path="./async_hooks.d.ts" />
 declare module "node:diagnostics_channel" {
+    import type { Disposable } from "node/select/disposal.js";
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
     import { AsyncLocalStorage } from "node:async_hooks";
     /**
      * Check if there are active subscribers to the named channel. This is helpful if
@@ -791,4 +794,11 @@ declare module "node:diagnostics_channel" {
 }
 declare module "diagnostics_channel" {
     export * from "node:diagnostics_channel";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:diagnostics_channel": typeof import("node:diagnostics_channel");
+        "diagnostics_channel": typeof import("diagnostics_channel");
+    }
 }

@@ -1,4 +1,11 @@
+/// <reference path="./crypto.d.ts" />
+/// <reference path="./fs/promises.d.ts" />
 declare module "node:quic" {
+    import type { Scope as NodeJS } from "node/select/array-bindings.js";
+    import type { Scope as Runtime } from "node/select/runtime-bindings.js";
+    import { AsyncDisposable, Scope as Streams, Symbol } from "node/select/zlib-bindings.js";
+    import type { BufferEncoding } from "node/select/buffer-bindings.js";
+    import type { Blob } from "node/select/fs-bindings.js";
     import { NonSharedBuffer } from "node:buffer";
     import { KeyObject, X509Certificate } from "node:crypto";
     import { FileHandle } from "node:fs/promises";
@@ -97,18 +104,18 @@ declare module "node:quic" {
      * on the client.
      * @since v26.2.0
      */
-    type OnHeadersCallback = (this: QuicStream, headers: NodeJS.Dict<string | string[]>) => void;
+    type OnHeadersCallback = (this: QuicStream, headers: Runtime.Dict<string | string[]>) => void;
     /**
      * Called when trailing headers are received from the peer.
      * @since v26.2.0
      */
-    type OnTrailersCallback = (this: QuicStream, trailers: NodeJS.Dict<string | string[]>) => void;
+    type OnTrailersCallback = (this: QuicStream, trailers: Runtime.Dict<string | string[]>) => void;
     /**
      * Called when informational (1xx) headers are received from the server
      * (e.g., 103 Early Hints).
      * @since v26.2.0
      */
-    type OnInfoCallback = (this: QuicStream, headers: NodeJS.Dict<string | string[]>) => void;
+    type OnInfoCallback = (this: QuicStream, headers: Runtime.Dict<string | string[]>) => void;
     /**
      * @since v23.8.0
      */
@@ -1091,7 +1098,7 @@ declare module "node:quic" {
          * specified and `headers` is provided, the stream is treated as
          * headers-only (terminal).
          */
-        headers?: NodeJS.Dict<string | readonly string[]> | readonly string[] | undefined;
+        headers?: Runtime.Dict<string | readonly string[]> | readonly string[] | undefined;
         /**
          * The priority level of the stream. One of `'high'`,
          * `'default'`, or `'low'`. **Default:** `'default'`.
@@ -1902,7 +1909,7 @@ declare module "node:quic" {
          * arrays. The object has `__proto__: null`.
          * @since v26.2.0
          */
-        readonly headers: NodeJS.Dict<string | string[]> | undefined;
+        readonly headers: Runtime.Dict<string | string[]> | undefined;
         /**
          * The callback to invoke when initial headers are received on the stream. The
          * callback receives `(headers)` where `headers` is an object (same format as
@@ -1912,7 +1919,7 @@ declare module "node:quic" {
          * Read/write.
          * @since v26.2.0
          */
-        onheaders: ((this: QuicStream, headers: NodeJS.Dict<string | string[]>) => void) | undefined;
+        onheaders: ((this: QuicStream, headers: Runtime.Dict<string | string[]>) => void) | undefined;
         /**
          * The callback to invoke when trailing headers are received from the peer.
          * The callback receives `(trailers)` where `trailers` is an object in the
@@ -1920,7 +1927,7 @@ declare module "node:quic" {
          * session that does not support headers. Read/write.
          * @since v26.2.0
          */
-        ontrailers: ((this: QuicStream, trailers: NodeJS.Dict<string | string[]>) => void) | undefined;
+        ontrailers: ((this: QuicStream, trailers: Runtime.Dict<string | string[]>) => void) | undefined;
         /**
          * The callback to invoke when informational (1xx) headers are received from
          * the server. The callback receives `(headers)` where `headers` is an object
@@ -1930,7 +1937,7 @@ declare module "node:quic" {
          * Read/write.
          * @since v26.2.0
          */
-        oninfo: ((this: QuicStream, headers: NodeJS.Dict<string | string[]>) => void) | undefined;
+        oninfo: ((this: QuicStream, headers: Runtime.Dict<string | string[]>) => void) | undefined;
         /**
          * The callback to invoke when the application is ready for trailing headers
          * to be sent. This is called synchronously — the user must call
@@ -1948,7 +1955,7 @@ declare module "node:quic" {
          * Read/write.
          * @since v26.2.0
          */
-        pendingTrailers: NodeJS.Dict<string | string[]> | undefined;
+        pendingTrailers: Runtime.Dict<string | string[]> | undefined;
         /**
          * Sends initial or response headers on the stream. For client-side streams,
          * this sends request headers. For server-side streams, this sends response
@@ -1958,7 +1965,7 @@ declare module "node:quic" {
          * string-array values. Pseudo-headers (`:method`, `:path`, etc.) must
          * appear before regular headers.
          */
-        sendHeaders(headers: NodeJS.Dict<string | string[]>, options?: StreamSendHeadersOptions): boolean;
+        sendHeaders(headers: Runtime.Dict<string | string[]>, options?: StreamSendHeadersOptions): boolean;
         /**
          * Sends informational (1xx) response headers. Server only. Throws
          * `ERR_INVALID_STATE` if the session does not support headers.
@@ -1966,7 +1973,7 @@ declare module "node:quic" {
          * @param headers Header object. Must include `:status` with a 1xx
          * value (e.g., `{ ':status': '103', 'link': '</style.css>; rel=preload' }`).
          */
-        sendInformationalHeaders(headers: NodeJS.Dict<string | string[]>): boolean;
+        sendInformationalHeaders(headers: Runtime.Dict<string | string[]>): boolean;
         /**
          * Sends trailing headers on the stream. Must be called synchronously during
          * the `stream.onwanttrailers` callback, or set ahead of time via
@@ -1976,7 +1983,7 @@ declare module "node:quic" {
          * @param headers Trailing header object. Pseudo-headers must not be
          * included in trailers.
          */
-        sendTrailers(headers: NodeJS.Dict<string | string[]>): boolean;
+        sendTrailers(headers: Runtime.Dict<string | string[]>): boolean;
         /**
          * The current priority of the stream. Returns `null` if the session does not
          * support priority (e.g. non-HTTP/3) or if the stream has been destroyed.
@@ -1994,7 +2001,7 @@ declare module "node:quic" {
          * has been destroyed.
          * @since v26.2.0
          */
-        setPriority(options?: NodeJS.PartialOptions<StreamPriority>): void;
+        setPriority(options?: Runtime.PartialOptions<StreamPriority>): void;
         /**
          * The stream implements `Symbol.asyncIterator`, making it directly usable
          * in `for await...of` loops. Each iteration yields a batch of `Uint8Array`
@@ -2022,7 +2029,7 @@ declare module "node:quic" {
          * ```
          * @since v26.2.0
          */
-        [Symbol.asyncIterator](): NodeJS.AsyncIterator<NodeJS.NonSharedUint8Array[]>;
+        [Symbol.asyncIterator](): Streams.AsyncIterator<NodeJS.NonSharedUint8Array[]>;
         /**
          * Returns a Writer object for pushing data to the stream incrementally.
          * The Writer implements the stream/iter Writer interface with the
@@ -2187,5 +2194,11 @@ declare module "node:quic" {
          * `sessionOptions.groups` is not specified.
          */
         const DEFAULT_GROUPS: string;
+    }
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:quic": typeof import("node:quic");
     }
 }

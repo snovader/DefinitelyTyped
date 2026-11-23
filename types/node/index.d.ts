@@ -24,6 +24,8 @@
 
 // NOTE: These definitions support Node.js and TypeScript 5.8+.
 
+// Preserve the declaration emit order of Node streams and Web Streams.
+/// <reference path="legacy/stream-globals.d.ts" />
 /// <reference path="./select/full-environment.d.ts" />
 
 // Reference required TypeScript libraries:
@@ -78,6 +80,7 @@
 /// <reference path="inspector.d.ts" />
 /// <reference path="inspector.generated.d.ts" />
 /// <reference path="inspector/promises.d.ts" />
+/// <reference path="legacy/module-globals.d.ts" />
 /// <reference path="module.d.ts" />
 /// <reference path="net.d.ts" />
 /// <reference path="os.d.ts" />
@@ -95,7 +98,6 @@
 /// <reference path="repl.d.ts" />
 /// <reference path="sea.d.ts" />
 /// <reference path="sqlite.d.ts" />
-/// <reference path="legacy/stream-globals.d.ts" />
 /// <reference path="stream.d.ts" />
 /// <reference path="stream/consumers.d.ts" />
 /// <reference path="stream/iter.d.ts" />
@@ -104,6 +106,7 @@
 /// <reference path="string_decoder.d.ts" />
 /// <reference path="test.d.ts" />
 /// <reference path="test/reporters.d.ts" />
+/// <reference path="legacy/timers-globals.d.ts" />
 /// <reference path="timers.d.ts" />
 /// <reference path="timers/promises.d.ts" />
 /// <reference path="tls.d.ts" />

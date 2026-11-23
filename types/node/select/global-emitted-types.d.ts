@@ -58,6 +58,44 @@ declare module "node/select/process-types.js" {
 declare module "node/select/process-types" {
     export * from "node/select/process-types.js";
 }
+declare module "node/select/runtime-types.js" {
+    export import Architecture = NodeJS.Architecture;
+    export import Dict = NodeJS.Dict;
+    export import Module = NodeJS.Module;
+    export import PartialOptions = NodeJS.PartialOptions;
+    export import Platform = NodeJS.Platform;
+    export import ProcessEnv = NodeJS.ProcessEnv;
+    export import ReadOnlyDict = NodeJS.ReadOnlyDict;
+    export import Require = NodeJS.Require;
+    export import RequireExtensions = NodeJS.RequireExtensions;
+    export import RequireResolve = NodeJS.RequireResolve;
+    export import RequireResolveOptions = NodeJS.RequireResolveOptions;
+    export import Signals = NodeJS.Signals;
+}
+declare module "node/select/runtime-types" {
+    export * from "node/select/runtime-types.js";
+}
+declare module "node/select/base-types.js" {
+    export import ErrnoException = NodeJS.ErrnoException;
+    export import Iterator = NodeJS.Iterator;
+}
+declare module "node/select/base-types" {
+    export * from "node/select/base-types.js";
+}
+declare module "node/select/import-attributes.js" {
+    export type { ImportAttributes, ImportPhase } from "node:module";
+}
+declare module "node/select/import-attributes" {
+    export * from "node/select/import-attributes.js";
+}
+declare module "node/select/timer-types.js" {
+    export import Immediate = NodeJS.Immediate;
+    export import Timer = NodeJS.Timer;
+    export import Timeout = NodeJS.Timeout;
+}
+declare module "node/select/timer-types" {
+    export * from "node/select/timer-types.js";
+}
 declare module "node/select/process-support.js" {
     export import Dict = NodeJS.Dict;
     export import Module = NodeJS.Module;

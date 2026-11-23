@@ -1,4 +1,6 @@
+/// <reference path="./buffer.d.ts" />
 declare module "node:sea" {
+    import type { Blob } from "node/select/fs-bindings.js";
     type AssetKey = string;
     /**
      * @since v20.12.0
@@ -44,4 +46,10 @@ declare module "node:sea" {
      * embedded in the executable. If no assets are embedded, returns an empty array.
      */
     function getAssetKeys(): string[];
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:sea": typeof import("node:sea");
+    }
 }

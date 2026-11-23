@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { checkModules, checkPublicEmit } from "./modules.mjs";
 import { checkFsProcess, publicValueMembers } from "./fs-process.mjs";
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -13,6 +14,8 @@ const nodeDir = resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const { values } = parseArgs({ options: {
     baseline: { type: "string", default: "9b0ad8df8337133ee935159e5edf8947b1064085" },
+    "modules-only": { type: "boolean" },
+    "emit-only": { type: "boolean" },
     "fs-process-only": { type: "boolean" },
     "globals-only": { type: "boolean" },
     "zlib-only": { type: "boolean" },
@@ -48,6 +51,13 @@ function stage() {
     });
 }
 
+function moduleExports(ts, checker, module) {
+    return checker.getExportsOfModule(module).map(symbol => {
+        const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+        return [symbol.name, Boolean(target.flags & ts.SymbolFlags.Type), Boolean(target.flags & ts.SymbolFlags.Value)];
+    }).sort(([a], [b]) => a.localeCompare(b));
+}
+
 // Check the complete global and module name sets with the locally installed compiler API.
 function surface(ts, dir, types, lib, inspectValues = false) {
     const entry = join(dir, "surface.ts");
@@ -61,14 +71,15 @@ function surface(ts, dir, types, lib, inspectValues = false) {
     const globals = checker.getSymbolsInScope(program.getSourceFile(entry), flags.Type | flags.Value | flags.Namespace)
         .map(symbol => symbol.name).filter(name => !name.startsWith('"')).sort();
     const values = new Map();
-    const modules = new Map(checker.getAmbientModules().map(module => {
-        if (inspectValues && ['"node:fs"', '"node:process"'].includes(module.name)) {
+    const modules = new Map(checker.getAmbientModules().filter(module => !module.name.startsWith('"node/select/')).map(module => {
+        if (inspectValues === "public") {
+            const target = checker.resolveExternalModuleSymbol(module);
+            const value = checker.getTypeOfSymbolAtLocation(target, target.valueDeclaration ?? module.declarations[0]);
+            values.set(module.name, value.getProperties().map(symbol => symbol.name).filter(name => !name.startsWith("__@")).sort());
+        } else if (inspectValues && ['"node:fs"', '"node:process"'].includes(module.name)) {
             values.set(module.name, publicValueMembers(ts, checker, module));
         }
-        const members = checker.getExportsOfModule(module).map(symbol => {
-            const target = symbol.flags & flags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
-            return [symbol.name, Boolean(target.flags & flags.Type), Boolean(target.flags & flags.Value)];
-        }).sort(([a], [b]) => a.localeCompare(b));
+        const members = moduleExports(ts, checker, module);
         return [module.name, members];
     }));
     const nodeNamespace = checker.resolveName("NodeJS", program.getSourceFile(entry), flags.Namespace, false);
@@ -202,8 +213,10 @@ function checkBufferIdentity(ts, types, fixture) {
 }
 
 const zlibDependencies = [
-    "select/optional-builtins.d.ts", "select/zlib-builtins.d.ts", "zlib.d.ts", "stream.d.ts", "stream/iter.d.ts", "stream/promises.d.ts", "events.d.ts", "select/async-hooks.d.ts", "select/async-hooks-core.d.ts",
-    "select/emitter.d.ts", "select/stream-types.d.ts", "select/zlib-bindings.d.ts", "select/zlib-nodejs.d.ts",
+    "events.d.ts", "select/async-hooks-core.d.ts", "select/async-hooks.d.ts", "select/base-types.d.ts",
+    "select/disposal.d.ts", "select/emitter.d.ts", "select/event-bindings.d.ts", "select/event-scope.d.ts",
+    "select/stream-types.d.ts", "select/zlib-bindings.d.ts", "select/zlib-builtins.d.ts",
+    "select/zlib-nodejs.d.ts", "stream.d.ts", "stream/iter.d.ts", "stream/promises.d.ts", "zlib.d.ts",
 ];
 
 function checkZlib(host, mode, roots, bufferFiles, lib = "ESNext") {
@@ -219,7 +232,6 @@ function checkZlib(host, mode, roots, bufferFiles, lib = "ESNext") {
     const routed = version.match(/^Version (5\.[67])\./);
     if (routed) {
         expected.add(join(pkg, "ts" + routed[1], "select/zlib-bindings.d.ts"));
-        expected.add(join(pkg, "ts" + routed[1], "select/emitter.d.ts"));
         if (!roots) expected.add(join(pkg, "ts" + routed[1], "zlib.d.ts"));
     }
     // Compare *all* inputs, including ES libraries and external packages. The
@@ -265,19 +277,8 @@ function checkGlobals() {
     const packages = result => new Set(result.files.filter(file => file.includes("/node_modules/undici-types/"))
         .map(file => basename(file)));
     const fullEntry = files => files.some(file => /^(?:ts5\.[67]\/)?index\.d\.ts$/.test(file));
-    const stock = test(candidate, ["node/globals"], fixture);
-    const base = test(baseline, ["node"], fixture);
-    assert.equal(base.diagnostics, "");
-    assert.equal(stock.diagnostics, base.diagnostics);
-    assert.equal(stock.declaration, base.declaration);
-    assert.ok(fullEntry(nodeFiles(candidate, stock.files)), "stock Undici references the full Node entry");
-    const stockFull = test(candidate, ["node"], fixture);
-    assert.equal(stockFull.declaration, base.declaration);
-    assert.equal(stockFull.diagnostics, base.diagnostics);
-    applyUndiciPatch(candidate);
     checkBuiltinRegistry();
-    const expectedUndici = new Set(["client-stats", "client", "connector", "dispatcher", "errors", "eventsource",
-        "fetch", "formdata", "header", "patch", "readable", "utility", "websocket"].map(name => name + ".d.ts"));
+    const expectedUndici = new Set(["header.d.ts", "utility.d.ts"]);
     for (const [host, mode, roots] of [["", "nodenext", false], ["DOM", "bundler", true],
         ["WebWorker", "nodenext-esm", false], ["", "nodenext-esm", false]]) {
         const upstream = test(baseline, ["node"], fixture, host, mode, roots);
@@ -286,8 +287,8 @@ function checkGlobals() {
             const result = test(candidate, types, fixture, host, mode, roots);
             const context = types.join("+") + " " + (host || "ES") + " " + mode;
             assert.equal(result.diagnostics, upstream.diagnostics, context);
-            // Without the Undici barrel, the emitter names the same Headers class by its defining module.
-            const fetchModule = mode === "nodenext-esm" ? "undici-types/fetch.js" : "undici-types/fetch";
+            // Only full Node imports Undici's barrel. The global selector names the isolated declaration.
+            const fetchModule = mode === "nodenext-esm" ? "node/select/headers.js" : "node/select/headers";
             const expected = types.includes("node") ? upstream.declaration
                 : upstream.declaration.replace('import("undici-types").Headers', `import("${fetchModule}").Headers`);
             assert.equal(result.declaration, expected, context + " globals emit");
@@ -296,6 +297,8 @@ function checkGlobals() {
                 const downstream = test(candidate, types, { files: ["use-globals-output"] }, host, mode, roots);
                 assert.equal(downstream.diagnostics, "", "consume emitted global types in " + mode);
                 assert.ok(!fullEntry(nodeFiles(candidate, downstream.files)));
+                const fullConsumer = test(candidate, ["node"], { files: ["use-undici-output"] }, host, mode, roots);
+                assert.equal(fullConsumer.diagnostics, "", "full Node consumes the published Undici identity in " + mode);
             }
             const files = nodeFiles(candidate, result.files);
             assert.equal(fullEntry(files), types.includes("node"), context);
@@ -345,12 +348,6 @@ function checkBuiltinRegistry() {
     }
 }
 
-function applyUndiciPatch(dir) {
-    const cwd = join(dir, "node_modules/undici-types");
-    assert.equal(JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).version, "8.9.0");
-    execFileSync("patch", ["-s", "-p1", "-i", join(here, "undici-types-8.9.0.patch")], { cwd });
-}
-
 function checkSelectors() {
     if (compiler === require.resolve("typescript/bin/tsc")) {
         const upstream = bufferSignatures(targets[0]);
@@ -378,7 +375,7 @@ function checkSelectors() {
     assert.equal(previousHooks.diagnostics, "");
     assert.equal(currentHooks.diagnostics, previousHooks.diagnostics);
     assert.equal(currentHooks.declaration, previousHooks.declaration);
-    assert.deepEqual(nodeFiles(targets[1], currentHooks.files).sort(), ["async_hooks.d.ts", "select/async-hooks-core.d.ts"]);
+    assert.deepEqual(nodeFiles(targets[1], currentHooks.files).sort(), ["async_hooks.d.ts", "select/async-hooks-core.d.ts", "select/async-hooks.d.ts", "select/disposal.d.ts"]);
     const es2020 = compile(targets[1], ["node/buffer"], "", "nodenext", false, true, "ES2020");
     checkZlib("", "nodenext", false, es2020.files, "ES2020");
     const esm = compile(targets[1], ["node/buffer"], "", "nodenext-esm", false, true);
@@ -414,7 +411,13 @@ function checkSelectors() {
 
 try {
     stage();
-    const all = !["fs-process-only", "globals-only", "zlib-only", "overloads-only"].some(key => values[key]);
+    const all = !["emit-only", "modules-only", "fs-process-only", "globals-only", "zlib-only", "overloads-only"].some(key => values[key]);
+    if (all || values["emit-only"] || values["modules-only"]) {
+        const api = resolve(dirname(realpathSync(compiler)), "../lib/typescript.js");
+        const context = { baseline: targets[0], candidate: targets[1], compile, nodeFiles, surface, moduleExports, ts: existsSync(api) ? require(api) : undefined, version };
+        checkPublicEmit(context);
+        if (!values["emit-only"]) checkModules(context);
+    }
     if (all || values["fs-process-only"]) {
         for (const selector of ["fs", "process"]) {
             const stock = compile(targets[1], ["node/" + selector], "", "nodenext", false, false, "ESNext",
@@ -424,7 +427,6 @@ try {
         }
     }
     if (all || values["globals-only"]) checkGlobals();
-    else applyUndiciPatch(targets[1]);
     if (all || values["fs-process-only"]) {
         const api = resolve(dirname(realpathSync(compiler)), "../lib/typescript.js");
         const ts = existsSync(api) ? require(api) : undefined;

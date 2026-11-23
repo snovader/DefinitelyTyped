@@ -1,4 +1,5 @@
 declare module "node:wasi" {
+    import type { Scope as NodeJS } from "node/select/runtime-bindings.js";
     interface WASIOptions {
         /**
          * An array of strings that the WebAssembly application will
@@ -128,4 +129,11 @@ declare module "node:wasi" {
 }
 declare module "wasi" {
     export * from "node:wasi";
+}
+
+declare module "node/select/optional-builtins.js" {
+    interface OptionalBuiltins {
+        "node:wasi": typeof import("node:wasi");
+        "wasi": typeof import("wasi");
+    }
 }

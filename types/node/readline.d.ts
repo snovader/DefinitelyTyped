@@ -1,3 +1,4 @@
+/// <reference path="./buffer.d.ts" />
 /// <reference path="./readline/promises.d.ts" />
 declare module "node:readline" {
     import type { AbortSignal, Buffer } from "node/select/buffer-bindings.js";

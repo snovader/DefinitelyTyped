@@ -3,7 +3,7 @@
 /// <reference path="./stream/iter.d.ts" />
 /// <reference path="./stream/promises.d.ts" />
 declare module "node:stream" {
-    import { type Scope as NodeJS, Symbol } from "node/select/zlib-bindings.js";
+    import { type DuplexDisposal, type Scope as NodeJS, Symbol as DisposalSymbol } from "node/select/zlib-bindings.js";
     import type { AbortSignal, BufferEncoding } from "node/select/buffer-bindings.js";
     import { Blob } from "node:buffer";
     import { Abortable, EventEmitter } from "node:events";
@@ -694,7 +694,7 @@ declare module "node:stream" {
              * a promise that fulfills when the stream is finished.
              * @since v20.4.0
              */
-            [Symbol.asyncDispose](): Promise<void>;
+            [DisposalSymbol.asyncDispose](): Promise<void>;
             // #region InternalEventEmitter
             addListener<E extends keyof ReadableEventMap>(
                 eventName: E,
@@ -1049,7 +1049,7 @@ declare module "node:stream" {
              * a promise that fulfills when the stream is finished.
              * @since v22.4.0, v20.16.0
              */
-            [Symbol.asyncDispose](): Promise<void>;
+            [DisposalSymbol.asyncDispose](): Promise<void>;
             // #region InternalEventEmitter
             addListener<E extends keyof WritableEventMap>(
                 eventName: E,
@@ -1225,7 +1225,7 @@ declare module "node:stream" {
             removeListener(eventName: string | symbol, listener: (...args: any[]) => void): this;
             // #endregion
         }
-        interface Duplex extends Readable, Writable {}
+        interface Duplex extends DuplexDisposal, Readable, Writable {}
         /**
          * The utility function `duplexPair` returns an Array with two items,
          * each being a `Duplex` stream connected to the other side:
